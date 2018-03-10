@@ -1,0 +1,25 @@
+.app-bar-container .d-menu {
+    top: 100%!important;
+  }
+
+.footerItem0 {
+    vertical-align: top;
+    margin-top: 5px;
+    color: gray;
+}
+.footerItem1 {
+    vertical-align: top;
+    margin-top: 5px;
+    margin-left: 20px;
+    color: gray;
+}
+
+footer.common-footer {
+/* HTML5 display-role reset for older browsers */
+*zoom: 1;
+/*position: absolute;*/
+bottom: 0;
+left: 0;
+height: auto;
+width: 100%;
+}

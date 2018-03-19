@@ -1,5 +1,5 @@
 /*!
- * Metro 4 Components Library v4.0.2 build 612-beta (https://metroui.org.ua)
+ * Metro 4 Components Library v4.1.0 build 625 (https://metroui.org.ua)
  * Copyright 2018 Sergey Pimenov
  * Licensed under MIT
  */
@@ -67,11 +67,19 @@ if ( typeof Object.create !== 'function' ) {
     };
 }
 
+if (typeof Object.values !== 'function') {
+    Object.values = function(obj) {
+        return Object.keys(obj).map(function(e) {
+            return obj[e]
+        });
+    }
+}
+
 var isTouch = (('ontouchstart' in window) || (navigator.MaxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0));
 
 var Metro = {
 
-    version: "4.0.2-612-beta",
+    version: "4.1.0-625",
     isTouchable: isTouch,
     fullScreenEnabled: document.fullscreenEnabled,
     sheet: null,
@@ -319,10 +327,11 @@ var Metro = {
                         var mc = $this.data('metroComponent');
 
                         if (mc === undefined) {
-                            $this.data('metroComponent', [func]);
+                            mc = [func];
                         } else {
                             mc.push(func);
                         }
+                        $this.data('metroComponent', mc);
                     }
                 } catch (e) {
                     console.log(e.message, e.stack);
@@ -370,14 +379,28 @@ var Metro = {
                 var mc = element.data('metroComponent');
 
                 if (mc === undefined) {
-                    element.data('metroComponent', [name]);
+                    mc = [name];
                 } else {
                     mc.push(name);
                 }
+                element.data('metroComponent', mc);
             }
         } catch (e) {
             console.log(e.message, e.stack);
         }
+    },
+
+    reinitPligin: function(element, name){
+        this.destroyPlugin(element, name);
+        this.initPlugin(element, name);
+    },
+
+    reinitPliginAll: function(element){
+        var mc = $(element).data("metroComponent");
+
+        if (mc !== undefined && mc.length > 0) $.each(mc, function(){
+            Metro.reinitPligin(element, this);
+        });
     },
 
     noop: function(){},
@@ -3755,6 +3778,8 @@ var AppBar = {
 
         if (menu.length === 0) {
             hamburger.hide();
+        } else {
+            Utils.addCssRule(Metro.sheet, ".app-bar-menu li", "list-style: none!important;");
         }
 
         if( !!element.attr("id") === false ){
@@ -4296,8 +4321,8 @@ var Audio = {
 };
 
 Metro.plugin('audio', Audio);
-// Source: js/plugins/buttons-group.js
-var ButtonsGroup = {
+// Source: js/plugins/button-group.js
+var ButtonGroup = {
     init: function( options, elem ) {
         this.options = $.extend( {}, this.options, options );
         this.elem  = elem;
@@ -4312,7 +4337,8 @@ var ButtonsGroup = {
 
     options: {
         targets: "button",
-        clsActive: "bg-gray",
+        clsActive: "active",
+        requiredButton: false,
         mode: Metro.groupMode.ONE,
         onButtonClick: Metro.noop,
         onButtonsGroupCreate: Metro.noop
@@ -4343,10 +4369,27 @@ var ButtonsGroup = {
 
     _createGroup: function(){
         var that = this, element = this.element, o = this.options;
+        var cls, buttons, buttons_active, id = Utils.elementId("button-group");
 
-        if (o.mode === Metro.groupMode.ONE && element.find(o.clsActive).length === 0) {
-            $(element.find(o.targets)[0]).addClass(o.clsActive);
+        if (element.attr("id") === undefined) {
+            element.attr("id", id);
         }
+
+        element.addClass("button-group");
+
+        buttons = element.find( o.targets );
+        buttons_active = element.find( "." + o.clsActive );
+
+        if (o.mode === Metro.groupMode.ONE && buttons_active.length === 0 && o.requiredButton === true) {
+            $(buttons[0]).addClass(o.clsActive);
+        }
+
+        if (o.mode === Metro.groupMode.ONE && buttons_active.length > 1) {
+            buttons.removeClass(o.clsActive);
+            $(buttons[0]).addClass(o.clsActive);
+        }
+
+        element.find( "." + o.clsActive ).addClass("js-active");
     },
 
     _createEvents: function(){
@@ -4355,17 +4398,17 @@ var ButtonsGroup = {
         element.on(Metro.events.click, o.targets, function(){
             var el = $(this);
 
-            Utils.exec(o.onButtonClick, [el]);
+            Utils.exec(o.onButtonClick, [el], this);
 
             if (o.mode === Metro.groupMode.ONE && el.hasClass(o.clsActive)) {
                 return ;
             }
 
             if (o.mode === Metro.groupMode.ONE) {
-                element.find(o.targets).removeClass(o.clsActive);
-                el.addClass(o.clsActive);
+                element.find(o.targets).removeClass(o.clsActive).removeClass("js-active");
+                el.addClass(o.clsActive).addClass("js-active");
             } else {
-                el.toggleClass(o.clsActive);
+                el.toggleClass(o.clsActive).toggleClass("js-active");
             }
 
         });
@@ -4378,12 +4421,12 @@ var ButtonsGroup = {
     destroy: function(){
         var element = this.element, o = this.options;
         element.off(Metro.events.click, o.targets);
-        element.find(o.targets).removeClass(o.clsActive);
+        element.find(o.targets).removeClass(o.clsActive).removeClass("js-active");
     }
 
 };
 
-Metro.plugin('buttonsGroup', ButtonsGroup);
+Metro.plugin('buttongroup', ButtonGroup);
 // Source: js/plugins/calendar.js
 var Calendar = {
     init: function( options, elem ) {
@@ -5206,6 +5249,8 @@ var CalendarPicker = {
         return this;
     },
 
+    dependencies: ['calendar'],
+
     options: {
         locale: METRO_LOCALE,
         size: "100%",
@@ -5267,6 +5312,10 @@ var CalendarPicker = {
         var container = $("<div>").addClass("input " + element[0].className + " calendar-picker");
         var buttons = $("<div>").addClass("button-group");
         var calendarButton, clearButton, cal = $("<div>").addClass("drop-shadow");
+
+        if (element.attr("type") === undefined) {
+            element.attr("type", "text");
+        }
 
         this.value = element.val();
         if (Utils.isDate(this.value)) {
@@ -6048,8 +6097,6 @@ var Charms = {
         var element = this.element, o = this.options;
 
         element.on(Metro.events.click, function(e){
-            e.preventDefault();
-            e.stopPropagation();
         });
     },
 
@@ -6196,6 +6243,7 @@ var Checkbox = {
     },
     options: {
         caption: "",
+        indeterminate: false,
         captionPosition: "right",
         disabled: false,
         clsElement: "",
@@ -6222,41 +6270,40 @@ var Checkbox = {
         var that = this, element = this.element, o = this.options;
         var prev = element.prev();
         var parent = element.parent();
-        var container = $("<label>").addClass("checkbox " + element[0].className);
+        var checkbox = $("<label>").addClass("checkbox " + element[0].className);
         var check = $("<span>").addClass("check");
         var caption = $("<span>").addClass("caption").html(o.caption);
 
         if (element.attr('id') === undefined) {
-            element.attr('id', Utils.uniqueId());
+            element.attr('id', Utils.elementId("checkbox"));
         }
 
-        container.attr('for', element.attr('id'));
+        checkbox.attr('for', element.attr('id'));
 
         element.attr("type", "checkbox");
-        element.appendTo(container);
+        element.appendTo(checkbox);
 
         if (prev.length === 0) {
-            parent.prepend(container);
+            parent.prepend(checkbox);
         } else {
-            container.insertAfter(prev);
+            checkbox.insertAfter(prev);
         }
 
-        check.appendTo(container);
+        check.appendTo(checkbox);
+        caption.appendTo(checkbox);
 
         if (o.captionPosition === 'left') {
-            caption.insertBefore(check);
-        } else {
-            caption.insertAfter(check);
+            checkbox.addClass("caption-left");
         }
 
         this.origin.className = element[0].className;
         element[0].className = '';
 
-        container.addClass(o.clsElement);
+        checkbox.addClass(o.clsElement);
         caption.addClass(o.clsCaption);
         check.addClass(o.clsCheck);
 
-        if (element.attr("indeterminate") !== undefined) {
+        if (o.indeterminate) {
             element[0].indeterminate = true;
         }
 
@@ -6290,13 +6337,13 @@ var Checkbox = {
     },
 
     toggleIndeterminate: function(){
-        this.element[0].indeterminate = this.element.attr("indeterminate") !== undefined;
+        this.element[0].indeterminate = JSON.parse(this.element.attr("data-indeterminate")) === true;
     },
 
     changeAttribute: function(attributeName){
         switch (attributeName) {
             case 'disabled': this.toggleState(); break;
-            case 'indeterminate': this.toggleIndeterminate(); break;
+            case 'data-indeterminate': this.toggleIndeterminate(); break;
         }
     },
 
@@ -7361,6 +7408,8 @@ var DatePicker = {
         clsMonth: "",
         clsDay: "",
         clsYear: "",
+        okButtonIcon: "<span class='default-icon-check'></span>",
+        cancelButtonIcon: "<span class='default-icon-cross'></span>",
         onSet: Metro.noop,
         onOpen: Metro.noop,
         onClose: Metro.noop,
@@ -7480,8 +7529,8 @@ var DatePicker = {
         selectBlock.height((o.distance * 2 + 1) * 40);
 
         actionBlock = $("<div>").addClass("action-block").appendTo(selectWrapper);
-        $("<button>").attr("type", "button").addClass("button action-ok").html("<span class='default-icon-check'></span>").appendTo(actionBlock);
-        $("<button>").attr("type", "button").addClass("button action-cancel").html("<span class='default-icon-cross'></span>").appendTo(actionBlock);
+        $("<button>").attr("type", "button").addClass("button action-ok").html(o.okButtonIcon).appendTo(actionBlock);
+        $("<button>").attr("type", "button").addClass("button action-cancel").html(o.cancelButtonIcon).appendTo(actionBlock);
 
 
         element[0].className = '';
@@ -7787,7 +7836,7 @@ var Dialog = {
         element.addClass("dialog");
 
         if (element.attr("id") === undefined) {
-            element.attr("id", Utils.uniqueId());
+            element.attr("id", Utils.elementId("dialog"));
         }
 
         if (o.title !== "") {
@@ -8027,7 +8076,7 @@ Metro['dialog'] = {
         dialog.toggle();
     },
 
-    isOpen: function(){
+    isOpen: function(el){
         if (!this.isDialog(el)) {
             return false;
         }
@@ -9130,7 +9179,7 @@ var Keypad = {
         if (parent.hasClass("input")) {
             keypad = parent;
         } else {
-            keypad = $("<div>").addClass(element[0].className);
+            keypad = $("<div>").addClass("input").addClass(element[0].className);
         }
 
         keypad.addClass("keypad");
@@ -9596,10 +9645,6 @@ var Listview = {
 
         if (v === undefined) {
             return o.view;
-        }
-
-        if (Object.values(Metro.listView).indexOf(v) === -1) {
-            return ;
         }
 
         o.view = v;
@@ -10180,8 +10225,13 @@ var NavigationView = {
         var that = this, element = this.element, o = this.options;
         var pane = this.pane, content = this.content;
 
-        element.on(Metro.events.click, ".pull-button, .holder", function(){
+        element.on(Metro.events.click, ".pull-button, .holder", function(e){
             var pane_compact = pane.width() < 280;
+            var target = $(this);
+
+            if (target.hasClass("holder")) {
+                target.parent().find("input").focus();
+            }
 
             if (that.pane.hasClass("open")) {
                 that.close();
@@ -10198,6 +10248,7 @@ var NavigationView = {
                 return ;
             }
 
+            return true;
         });
 
         if (this.paneToggle !== null) {
@@ -10360,6 +10411,8 @@ var Panel = {
 
         return this;
     },
+
+    dependencies: ['draggable', 'collapse'],
 
     options: {
         titleCaption: "",
@@ -10614,7 +10667,7 @@ var Popover = {
         var that = this, elem = this.elem, element = this.element, o = this.options;
         var popover = $("<div>").addClass("popover neb").addClass(o.clsPopover).html(o.popoverText);
         var neb_pos;
-        var id = Utils.uniqueId();
+        var id = Utils.elementId("popover");
 
         popover.attr("id", id);
 
@@ -10865,6 +10918,9 @@ var Radio = {
         this.options = $.extend( {}, this.options, options );
         this.elem  = elem;
         this.element = $(elem);
+        this.origin = {
+            className: ""
+        };
 
         this._setOptionsFromDOM();
         this._create();
@@ -10901,30 +10957,30 @@ var Radio = {
         var that = this, element = this.element, o = this.options;
         var prev = element.prev();
         var parent = element.parent();
-        var container = $("<label>").addClass("radio " + element[0].className);
+        var radio = $("<label>").addClass("radio " + element[0].className);
         var check = $("<span>").addClass("check");
         var caption = $("<span>").addClass("caption").html(o.caption);
 
         element.attr("type", "radio");
 
         if (prev.length === 0) {
-            parent.prepend(container);
+            parent.prepend(radio);
         } else {
-            container.insertAfter(prev);
+            radio.insertAfter(prev);
         }
 
-        element.appendTo(container);
-        check.appendTo(container);
+        element.appendTo(radio);
+        check.appendTo(radio);
+        caption.appendTo(radio);
 
         if (o.captionPosition === 'left') {
-            caption.insertBefore(check);
-        } else {
-            caption.insertAfter(check);
+            radio.addClass("caption-left");
         }
 
+        this.origin.className = element[0].className;
         element[0].className = '';
 
-        container.addClass(o.clsElement);
+        radio.addClass(o.clsElement);
         caption.addClass(o.clsCaption);
         check.addClass(o.clsCheck);
 
@@ -10957,6 +11013,14 @@ var Radio = {
         switch (attributeName) {
             case 'disabled': this.toggleState(); break;
         }
+    },
+
+    destroy: function(){
+        var element = this.element;
+        var parent = element.parent();
+        element[0].className = this.origin.className;
+        element.insertBefore(parent);
+        parent.remove();
     }
 };
 
@@ -11311,6 +11375,8 @@ var RibbonMenu = {
         return this;
     },
 
+    dependencies: ['buttongroup'],
+
     options: {
         onStatic: Metro.noop,
         onBeforeTab: Metro.noop_true,
@@ -11359,7 +11425,7 @@ var RibbonMenu = {
         var fluentGroups = element.find(".ribbon-toggle-group");
         $.each(fluentGroups, function(){
             var g = $(this);
-            g.buttonsGroup({
+            g.buttongroup({
                 clsActive: "active"
             });
 
@@ -11372,7 +11438,7 @@ var RibbonMenu = {
             });
 
             g.css("width", Math.ceil(gw * btns.length / 3) + 4);
-        })
+        });
     },
 
     _createEvents: function(){
@@ -11725,41 +11791,44 @@ var Select = {
         this._createEvents();
     },
 
+    _addOption: function(item, parent){
+        var option = $(item);
+        var l, a;
+        var element = this.element, o = this.options;
+        var input = element.siblings("input");
+
+        l = $("<li>").addClass(o.clsOption).data("text", item.text).data('value', item.value ? item.value : item.text).appendTo(parent);
+        a = $("<a>").html(item.text).appendTo(l).addClass(item.className);
+
+        if (option.is(":selected")) {
+            element.val(item.value);
+            input.val(item.text).trigger("change");
+            element.trigger("change");
+        }
+
+        a.appendTo(l);
+        l.appendTo(parent);
+    },
+
+    _addOptionGroup: function(item, parent){
+        var that = this;
+        var group = $(item);
+
+        $("<li>").html(item.label).addClass("group-title").appendTo(parent);
+
+        $.each(group.children(), function(){
+            that._addOption(this, parent);
+        })
+    },
+
     _createSelect: function(){
-
-        function addOption(item, parent){
-            var option = $(item);
-            var l, a;
-
-            l = $("<li>").addClass(o.clsOption).data("text", item.text).data('value', item.value).appendTo(list);
-            a = $("<a>").html(item.text).appendTo(l).addClass(item.className);
-
-            if (option.is(":selected")) {
-                element.val(item.value);
-                input.val(item.text).trigger("change");
-                element.trigger("change");
-            }
-
-            a.appendTo(l);
-            l.appendTo(parent);
-        }
-
-        function addOptionGroup(item, parent){
-            var group = $(item);
-            var optgroup = $("<li>").html(item.label).addClass("group-title").appendTo(parent);
-            $.each(group.children(), function(){
-                addOption(this, parent);
-            })
-        }
-
         var that = this, element = this.element, o = this.options;
 
         var prev = element.prev();
         var parent = element.parent();
         var container = $("<div>").addClass("select " + element[0].className).addClass(o.clsElement);
         var multiple = element.prop("multiple");
-        var select_id = Utils.uniqueId();
-
+        var select_id = Utils.elementId("select");
 
         container.attr("id", select_id).addClass("dropdown-toggle");
 
@@ -11773,23 +11842,22 @@ var Select = {
         element.addClass(o.clsSelect);
 
         if (multiple === false) {
-            var input = $("<input>").attr("type", "text").attr("name", "__" + element.attr("name") + "__").prop("readonly", true);
+            var input = $("<input>").attr("type", "text").attr("name", "__" + select_id + "__").prop("readonly", true);
             var list = $("<ul>").addClass("d-menu").css({
                 "max-height": o.dropHeight
             });
 
+            container.append(input);
+            container.append(list);
+
             $.each(element.children(), function(){
                 if (this.tagName === "OPTION") {
-                    addOption(this, list);
+                    that._addOption(this, list);
                 } else if (this.tagName === "OPTGROUP") {
-                    addOptionGroup(this, list);
-                } else {
-
+                    that._addOptionGroup(this, list);
                 }
             });
 
-            container.append(input);
-            container.append(list);
             list.dropdown({
                 duration: o.duration,
                 toggleElement: "#"+select_id,
@@ -11802,12 +11870,13 @@ var Select = {
                         }
                         l.data('dropdown').close();
                     });
-                    Utils.exec(o.onDrop, [list, element]);
+                    Utils.exec(o.onDrop, [list, element], list[0]);
                 },
                 onUp: function(){
-                    Utils.exec(o.onUp, [list, element]);
+                    Utils.exec(o.onUp, [list, element], list[0]);
                 }
             });
+
         }
 
         if (o.prepend !== "") {
@@ -11830,6 +11899,7 @@ var Select = {
         } else {
             this.enable();
         }
+
     },
 
     _createEvents: function(){
@@ -11873,8 +11943,51 @@ var Select = {
         this.element.parent().removeClass("disabled");
     },
 
+    data: function(op){
+        var that = this, element = this.element;
+        var list = element.siblings("ul");
+        var option, option_group;
+
+        element.html("");
+        list.html("");
+
+        if (typeof op === 'string') {
+            element.html(op);
+        } else if (Utils.isObject(op)) {
+            $.each(op, function(key, val){
+                if (Utils.isObject(val)) {
+                    option_group = $("<optgroup>").attr("label", key).appendTo(element);
+                    $.each(val, function(key2, val2){
+                        $("<option>").attr("value", key2).text(val2).appendTo(option_group);
+                    });
+                } else {
+                    $("<option>").attr("value", key).text(val).appendTo(element);
+                }
+            });
+        }
+
+        $.each(element.children(), function(){
+            if (this.tagName === "OPTION") {
+                that._addOption(this, list);
+            } else if (this.tagName === "OPTGROUP") {
+                that._addOptionGroup(this, list);
+            }
+        });
+    },
+
     changeAttribute: function(attributeName){
 
+    },
+
+    destroy: function(){
+        var element = this.element;
+        var container = element.parent();
+        var list = element.siblings("ul");
+        container.off(Metro.events.click);
+        list.off(Metro.events.click, "li");
+        Metro.destroyPlugin(list, "dropdown");
+        element.insertBefore(container);
+        container.remove();
     }
 };
 
@@ -12545,7 +12658,7 @@ var Streamer = {
         element.addClass("streamer");
 
         if (element.attr("id") === undefined) {
-            element.attr("id", Utils.uniqueId());
+            element.attr("id", Utils.elementId("streamer"));
         }
 
         if (o.source === null && o.data === null) {
@@ -13147,11 +13260,10 @@ var Switch = {
 
         element.appendTo(container);
         check.appendTo(container);
+        caption.appendTo(container);
 
         if (o.captionPosition === 'left') {
-            caption.insertBefore(check);
-        } else {
-            caption.insertAfter(check);
+            container.addClass("caption-left");
         }
 
         element[0].className = '';
@@ -13204,7 +13316,7 @@ var Tabs = {
         this._setOptionsFromDOM();
         this._create();
 
-        Utils.exec(this.options.onTabsCreate, [this.element]);
+        Utils.exec(this.options.onTabsCreate, [this.element], this.elem);
 
         return this;
     },
@@ -13231,10 +13343,19 @@ var Tabs = {
 
     _create: function(){
         var that = this, element = this.element, o = this.options;
+        var tab = element.find(".active").length > 0 ? $(element.find(".active")[0]) : undefined;
+
+        this._createStructure();
+        this._createEvents();
+        this._open(tab);
+    },
+
+    _createStructure: function(){
+        var that = this, element = this.element, o = this.options;
         var prev = element.prev();
         var parent = element.parent();
         var container = $("<div>").addClass("tabs tabs-wrapper " + element[0].className);
-        var expandButton, expandTitle;
+        var expandTitle, hamburger;
 
         element[0].className = "";
 
@@ -13249,15 +13370,33 @@ var Tabs = {
         element.data('expanded', false);
 
         expandTitle = $("<div>").addClass("expand-title"); container.prepend(expandTitle);
-        expandButton = $("<span>").addClass("expand-button").html("<span></span>"); container.append(expandButton);
+        hamburger = container.find(".hamburger");
+        if (hamburger.length === 0) {
+            hamburger = $("<button>").attr("type", "button").addClass("hamburger menu-down").appendTo(container);
+            for(var i = 0; i < 3; i++) {
+                $("<span>").addClass("line").appendTo(hamburger);
+            }
 
-        container.on(Metro.events.click, ".expand-button, .expand-title", function(){
+            if (Colors.isLight(Utils.computedRgbToHex(Utils.getStyleOne(container, "background-color"))) === true) {
+                hamburger.addClass("dark");
+            }
+        }
+
+    },
+
+    _createEvents: function(){
+        var that = this, element = this.element, o = this.options;
+        var container = element.parent();
+
+        container.on(Metro.events.click, ".hamburger, .expand-title", function(){
             if (element.data('expanded') === false) {
                 element.addClass("expand");
                 element.data('expanded', true);
+                container.find(".hamburger").addClass("active");
             } else {
                 element.removeClass("expand");
                 element.data('expanded', false);
+                container.find(".hamburger").removeClass("active");
             }
         });
 
@@ -13268,12 +13407,11 @@ var Tabs = {
             if (element.data('expanded') === true) {
                 element.removeClass("expand");
                 element.data('expanded', false);
+                container.find(".hamburger").removeClass("active");
             }
-            if (Utils.exec(o.onBeforeTab, [tab, element]) === true) that._open(tab);
+            if (Utils.exec(o.onBeforeTab, [tab, element], tab[0]) === true) that._open(tab);
             e.preventDefault();
         });
-
-        this._open();
     },
 
     _collectTargets: function(){
@@ -13497,6 +13635,7 @@ var Tile = {
         cover: "",
         effect: "",
         effectInterval: 3000,
+        effectDuration: 500,
         target: null,
         canTransform: true,
         onClick: Metro.noop,
@@ -13624,11 +13763,11 @@ var Tile = {
 
             next = that.slides[that.currentSlide];
 
-            if (o.effect === "animate-slide-up") Animation.slideUp($(current), $(next));
-            if (o.effect === "animate-slide-down") Animation.slideDown($(current), $(next));
-            if (o.effect === "animate-slide-left") Animation.slideLeft($(current), $(next));
-            if (o.effect === "animate-slide-right") Animation.slideRight($(current), $(next));
-            if (o.effect === "animate-fade") Animation.fade($(current), $(next));
+            if (o.effect === "animate-slide-up") Animation.slideUp($(current), $(next), o.effectDuration);
+            if (o.effect === "animate-slide-down") Animation.slideDown($(current), $(next), o.effectDuration);
+            if (o.effect === "animate-slide-left") Animation.slideLeft($(current), $(next), o.effectDuration);
+            if (o.effect === "animate-slide-right") Animation.slideRight($(current), $(next), o.effectDuration);
+            if (o.effect === "animate-fade") Animation.fade($(current), $(next), o.effectDuration);
 
         }, o.effectInterval);
     },
@@ -13734,6 +13873,8 @@ var TimePicker = {
         clsHours: "",
         clsMinutes: "",
         clsSeconds: "",
+        okButtonIcon: "<span class='default-icon-check'></span>",
+        cancelButtonIcon: "<span class='default-icon-cross'></span>",
         onSet: Metro.noop,
         onOpen: Metro.noop,
         onClose: Metro.noop,
@@ -13854,8 +13995,8 @@ var TimePicker = {
         selectBlock.height((o.distance * 2 + 1) * 40);
 
         actionBlock = $("<div>").addClass("action-block").appendTo(selectWrapper);
-        $("<button>").attr("type", "button").addClass("button action-ok").html("<span class='default-icon-check'></span>").appendTo(actionBlock);
-        $("<button>").attr("type", "button").addClass("button action-cancel").html("<span class='default-icon-cross'></span>").appendTo(actionBlock);
+        $("<button>").attr("type", "button").addClass("button action-ok").html(o.okButtonIcon).appendTo(actionBlock);
+        $("<button>").attr("type", "button").addClass("button action-cancel").html(o.cancelButtonIcon).appendTo(actionBlock);
 
 
         element[0].className = '';
@@ -14312,7 +14453,7 @@ var Treeview = {
 
             // down
             checks = check.closest("li").find("ul input[type=checkbox]");
-            checks.prop("indeterminate", false);
+            checks.attr("data-indeterminate", false);
             checks.prop("checked", checked);
 
             checks = [];
@@ -14327,23 +14468,24 @@ var Treeview = {
                 var children_checked = ch.closest("li").children("ul").find("input[type=checkbox]:checked").length;
 
                 if (children > 0 && children_checked === 0) {
-                    ch.prop("indeterminate", false);
+                    ch.attr("data-indeterminate", false);
                     ch.prop("checked", false);
                 }
 
                 if (children_checked === 0) {
-                    ch.prop("indeterminate", false);
+                    ch.attr("data-indeterminate", false);
                 } else {
                     if (children_checked > 0 && children > children_checked) {
-                        ch.prop("indeterminate", true);
+                        ch.attr("data-indeterminate", true);
                     } else if (children === children_checked) {
-                        ch.prop("indeterminate", false);
+                        ch.attr("data-indeterminate", false);
                         ch.prop("checked", true);
                     }
                 }
             });
 
-            Utils.exec(o.onCheckClick, [checked, check, node, element]);
+
+            Utils.exec(o.onCheckClick, [checked, check, node, element], this);
 
         });
     },
@@ -14505,6 +14647,12 @@ var ValidatorFuncs = {
     number: function(val){
         return !isNaN(val);
     },
+    integer: function(val){
+        return Utils.isInt(val);
+    },
+    float: function(val){
+        return Utils.isFloat(val);
+    },
     digits: function(val){
         return /^\d+$/.test(val);
     },
@@ -14524,9 +14672,18 @@ var ValidatorFuncs = {
     compare: function(val, val2){
         return val === val2;
     },
+    not: function(val, not_this){
+        return val !== not_this;
+    },
 
     is_control: function(el){
-        return el.parent().hasClass("input") || el.parent().hasClass("select") || el.parent().hasClass("textarea")
+        return el.parent().hasClass("input")
+            || el.parent().hasClass("select")
+            || el.parent().hasClass("textarea")
+            || el.parent().hasClass("checkbox")
+            || el.parent().hasClass("switch")
+            || el.parent().hasClass("radio")
+            ;
     },
 
     validate: function(el, result, cb_ok, cb_error){
@@ -14534,6 +14691,7 @@ var ValidatorFuncs = {
         var input = $(el);
         var control = ValidatorFuncs.is_control(input);
         var funcs = input.data('validate') !== undefined ? String(input.data('validate')).split(" ").map(function(s){return s.trim();}) : [];
+        var errors = [];
 
         if (funcs.length === 0) {
             return true;
@@ -14545,28 +14703,59 @@ var ValidatorFuncs = {
             input.removeClass("invalid valid");
         }
 
-        $.each(funcs, function(){
-            if (this_result === false) return;
-            var rule = this.split("=");
-            var f, a;
-
-            f = rule[0]; rule.shift();
-            a = rule.join("=");
-
-            if (f === 'compare') {
-                a = input[0].form.elements[a].value;
-            }
-
-            if (Utils.isFunc(ValidatorFuncs[f]) === false)  {
+        if (input.attr('type') && input.attr('type').toLowerCase() === "checkbox") {
+            if (funcs.indexOf('required') === -1) {
                 this_result = true;
             } else {
-                this_result = ValidatorFuncs[f](input.val(), a);
+                this_result = input.is(":checked");
+            }
+
+            if (this_result === false) {
+                errors.push('required');
             }
 
             if (result !== undefined) {
                 result.val += this_result ? 0 : 1;
             }
-        });
+        } else if (input.attr('type') && input.attr('type').toLowerCase() === "radio") {
+            if (input.attr('name') === undefined) {
+                this_result = true;
+            }
+
+            var radio_selector = 'input[name=' + input.attr('name') + ']:checked';
+            this_result = $(radio_selector).length > 0;
+
+            if (result !== undefined) {
+                result.val += this_result ? 0 : 1;
+            }
+        } else {
+            $.each(funcs, function(){
+                if (this_result === false) return;
+                var rule = this.split("=");
+                var f, a;
+
+                f = rule[0]; rule.shift();
+                a = rule.join("=");
+
+                if (f === 'compare') {
+                    a = input[0].form.elements[a].value;
+                }
+
+                if (Utils.isFunc(ValidatorFuncs[f]) === false)  {
+                    this_result = true;
+                } else {
+                    this_result = ValidatorFuncs[f](input.val(), a);
+                }
+
+                if (this_result === false) {
+                    errors.push(f);
+                }
+
+                if (result !== undefined) {
+                    result.val += this_result ? 0 : 1;
+                }
+            });
+        }
 
         if (this_result === false) {
             if (control) {
@@ -14575,7 +14764,17 @@ var ValidatorFuncs = {
                 input.addClass("invalid")
             }
 
-            if (cb_error !== undefined) Utils.exec(cb_error, [input, input.val()]);
+            if (result !== undefined) {
+                result.log.push({
+                    input: input[0],
+                    name: input.attr("name"),
+                    value: input.val(),
+                    funcs: funcs,
+                    errors: errors
+                });
+            }
+
+            if (cb_error !== undefined) Utils.exec(cb_error, [input, input.val()], input[0]);
 
         } else {
             if (control) {
@@ -14584,7 +14783,7 @@ var ValidatorFuncs = {
                 input.addClass("valid")
             }
 
-            if (cb_ok !== undefined) Utils.exec(cb_ok, [input, input.val()]);
+            if (cb_ok !== undefined) Utils.exec(cb_ok, [input, input.val()], input[0]);
         }
 
         return true;
@@ -14600,6 +14799,7 @@ var Validator = {
         this.element = $(elem);
         this._onsubmit = null;
         this._action = null;
+        this.result = [];
 
         this._setOptionsFromDOM();
         this._create();
@@ -14607,13 +14807,17 @@ var Validator = {
         return this;
     },
 
+    dependencies: ['utils', 'colors'],
+
     options: {
         submitTimeout: 200,
         interactiveCheck: false,
         onBeforeSubmit: Metro.noop_true,
         onSubmit: Metro.noop,
         onError: Metro.noop,
-        onValid: Metro.noop,
+        onValidate: Metro.noop,
+        onErrorForm: Metro.noop,
+        onValidateForm: Metro.noop,
         onValidatorCreate: Metro.noop
     },
 
@@ -14653,8 +14857,7 @@ var Validator = {
                 }
             }
             if (o.interactiveCheck === true) {
-                input.on("propertychange change keyup input paste", function () {
-                    //that._check(this);
+                input.on(Metro.events.inputchange, function () {
                     ValidatorFuncs.validate(this);
                 });
             }
@@ -14671,33 +14874,37 @@ var Validator = {
             return that._submit();
         };
 
-        Utils.exec(this.options.onValidatorCreate, [this.element]);
+        Utils.exec(this.options.onValidatorCreate, [element], this.elem);
     },
 
     _submit: function(){
         var that = this, element = this.element, o = this.options;
+        var form = this.elem;
         var inputs = element.find("[data-validate]");
         var submit = element.find(":submit").attr('disabled', 'disabled').addClass('disabled');
         var result = {
-            val: 0
+            val: 0,
+            log: []
         };
 
         $.each(inputs, function(){
-            //that._check(this, result, true);
-            ValidatorFuncs.validate(this, result, o.onValid, o.onError);
+            ValidatorFuncs.validate(this, result, o.onValidate, o.onError);
         });
 
         submit.removeAttr("disabled").removeClass("disabled");
 
         element[0].action = this._action;
 
-        result.val += Utils.exec(o.onBeforeSubmit, [element]) === false ? 1 : 0;
+        result.val += Utils.exec(o.onBeforeSubmit, [element], this.elem) === false ? 1 : 0;
 
         if (result.val === 0) {
+            Utils.exec(o.onValidateForm, [element], form);
             setTimeout(function(){
-                Utils.exec(o.onSubmit, [element]);
-                if (that._onsubmit !==  null) Utils.exec(that._onsubmit);
+                Utils.exec(o.onSubmit, [element], form);
+                if (that._onsubmit !==  null) Utils.exec(that._onsubmit, null, form);
             }, o.submitTimeout);
+        } else {
+            Utils.exec(o.onErrorForm, [result.log, element], form);
         }
 
         return result.val === 0;
@@ -15275,6 +15482,8 @@ var Window = {
         return this;
     },
 
+    dependencies: ['draggable', 'resizeable'],
+
     options: {
         width: "auto",
         height: "auto",
@@ -15558,6 +15767,13 @@ var Window = {
         }, timeout);
     },
 
+    hide: function(){
+        this.win.addClass("no-visible");
+    },
+    show: function(){
+        this.win.removeClass("no-visible");
+    },
+
     toggleButtons: function(a) {
         var that = this, element = this.element, win = this.win, o = this.options;
         var btnClose = win.find(".btn-close");
@@ -15587,11 +15803,14 @@ var Window = {
 
     changeClass: function(a){
         var that = this, element = this.element, win = this.win, o = this.options;
+        if (a === "data-cls-window") {
+            win[0].className = "window " + (o.resizable ? " resizeable " : " ") + element.attr("data-cls-window");
+        }
         if (a === "data-cls-caption") {
-            win.find(".window-caption")[0].className = element.attr("data-cls-caption");
+            win.find(".window-caption")[0].className = "window-caption " + element.attr("data-cls-caption");
         }
         if (a === "data-cls-content") {
-            win.find(".window-content")[0].className = element.attr("data-cls-content");
+            win.find(".window-content")[0].className = "window-content " + element.attr("data-cls-content");
         }
     },
 
@@ -15699,6 +15918,7 @@ var Window = {
             case "data-btn-max": this.toggleButtons(attributeName); break;
             case "data-width":
             case "data-height": this.changeSize(attributeName); break;
+            case "data-cls-window":
             case "data-cls-caption":
             case "data-cls-content": this.changeClass(attributeName); break;
             case "data-shadow": this.toggleShadow(); break;
@@ -15805,13 +16025,18 @@ var Wizard = {
     _setHeight: function(){
         var that = this, element = this.element, o = this.options;
         var pages = element.children("section");
+        var max_height = 0;
 
         pages.children(".page-content").css("max-height", "none");
 
         $.each(pages, function(){
-            var c = $(this).children(".page-content");
-            c.css("max-height", c.outerHeight(true));
+            var h = $(this).height();
+            if (max_height < parseInt(h)) {
+                max_height = h;
+            }
         });
+
+        element.height(max_height);
     },
 
     _createEvents: function(){
@@ -15835,6 +16060,11 @@ var Wizard = {
 
         element.on(Metro.events.click, ".wizard-btn-finish", function(){
             Utils.exec(o.onFinishClick, [that.current, element])
+        });
+
+        element.on(Metro.events.click, ".complete", function(){
+            var index = $(this).index() + 1;
+            that.toPage(index);
         });
 
         $(window).on(Metro.events.resize, function(){

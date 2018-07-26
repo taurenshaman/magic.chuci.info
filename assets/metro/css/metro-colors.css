@@ -1,3 +1,8 @@
+/*
+ * Metro 4 Components Library v4.2.14 build 691 (https://metroui.org.ua)
+ * Copyright 2018 Sergey Pimenov
+ * Licensed under MIT
+ */
 .op-default {
   background-color: rgba(27, 161, 226, 0.7) !important;
 }
@@ -6,6 +11,9 @@
 }
 .bd-default {
   border-color: #dfdfdf !important;
+}
+.bd-transparent {
+  border-color: transparent !important;
 }
 .fg-black {
   color: #000000 !important;

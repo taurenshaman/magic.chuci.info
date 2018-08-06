@@ -1,5 +1,5 @@
 /*
- * Metro 4 Components Library v4.2.14 build 691 (https://metroui.org.ua)
+ * Metro 4 Components Library v4.2.17 build 694 (https://metroui.org.ua)
  * Copyright 2018 Sergey Pimenov
  * Licensed under MIT
  */
@@ -80,8 +80,8 @@ var isTouch = (('ontouchstart' in window) || (navigator.MaxTouchPoints > 0) || (
 
 var Metro = {
 
-    version: "4.2.14",
-    versionFull: "4.2.14.691 ",
+    version: "4.2.17",
+    versionFull: "4.2.17.694 ",
     isTouchable: isTouch,
     fullScreenEnabled: document.fullscreenEnabled,
     sheet: null,
@@ -339,22 +339,18 @@ var Metro = {
             var $this = $(this), w = this;
             var roles = $this.data('role').split(/\s*,\s*/);
             roles.map(function (func) {
-                try {
-                    if ($.fn[func] !== undefined && $this.data(func) === undefined) {
-                        $.fn[func].call($this);
-                        $this.data(func + '-initiated', true);
+                if ($.fn[func] !== undefined && $this.attr("data-role-"+func) === undefined) {
+                    $.fn[func].call($this);
+                    $this.attr("data-role-"+func, true);
 
-                        var mc = $this.data('metroComponent');
+                    var mc = $this.data('metroComponent');
 
-                        if (mc === undefined) {
-                            mc = [func];
-                        } else {
-                            mc.push(func);
-                        }
-                        $this.data('metroComponent', mc);
+                    if (mc === undefined) {
+                        mc = [func];
+                    } else {
+                        mc.push(func);
                     }
-                } catch (e) {
-                    console.log(e.message, e.stack);
+                    $this.data('metroComponent', mc);
                 }
             });
         });
@@ -369,15 +365,24 @@ var Metro = {
     },
 
     destroyPlugin: function(element, name){
+        var p, mc;
         element = Utils.isJQueryObject(element) ? element[0] : element;
-        var p = $(element).data(name);
-        if (Utils.isFunc(p['destroy'])) {
-            p['destroy']();
+        p = $(element).data(name);
+
+        if (!Utils.isValue(p)) {
+            throw new Error("Component can not be destroyed: the element is not a Ьуекщ 4 component.");
         }
-        var mc = $(element).data("metroComponent");
+
+        if (!Utils.isFunc(p['destroy'])) {
+            throw new Error("Component can not be destroyed: method destroy not found.");
+        }
+
+        p['destroy']();
+        mc = $(element).data("metroComponent");
         Utils.arrayDelete(mc, name);
         $(element).data("metroComponent", mc);
         $.removeData(element, name);
+        $(element).removeAttr("data-role-"+name);
     },
 
     destroyPluginAll: function(element){
@@ -392,9 +397,9 @@ var Metro = {
     initPlugin: function(element, name){
         element = $(element);
         try {
-            if ($.fn[name] !== undefined) {
+            if ($.fn[name] !== undefined && element.attr("data-role-"+name) === undefined) {
                 $.fn[name].call(element);
-                element.data(name + '-initiated', true);
+                element.attr("data-role-"+name, true);
 
                 var mc = element.data('metroComponent');
 
@@ -1591,6 +1596,120 @@ $.extend($.easing, {
 });
 
 
+// Source: js/utils/export.js
+var Export = {
+
+    init: function(){
+        return this;
+    },
+
+    options: {
+        csvDelimiter: "\t",
+        csvNewLine: "\r\n",
+        includeHeader: true
+    },
+
+    setup: function(options){
+        this.options = $.extend({}, this.options, options);
+        return this;
+    },
+
+    base64: function(data){
+        return window.btoa(unescape(encodeURIComponent(data)));
+    },
+
+    b64toBlob: function (b64Data, contentType, sliceSize) {
+        contentType = contentType || '';
+        sliceSize = sliceSize || 512;
+
+        var byteCharacters = window.atob(b64Data);
+        var byteArrays = [];
+
+        var offset;
+        for (offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+            var slice = byteCharacters.slice(offset, offset + sliceSize);
+
+            var byteNumbers = new Array(slice.length);
+            var i;
+            for (i = 0; i < slice.length; i = i + 1) {
+                byteNumbers[i] = slice.charCodeAt(i);
+            }
+
+            var byteArray = new window.Uint8Array(byteNumbers);
+
+            byteArrays.push(byteArray);
+        }
+
+        return new Blob(byteArrays, {
+            type: contentType
+        });
+    },
+
+    tableToCSV: function(table, filename, options){
+        var that = this, o = this.options;
+        var body, head, data = "";
+        var i, j, row, cell;
+
+        o = $.extend({}, o, options);
+
+        if (Utils.isJQueryObject(table)) {
+            table = table[0];
+        }
+
+        if (Utils.bool(o.includeHeader)) {
+
+            head = table.querySelectorAll("thead")[0];
+
+            for(i = 0; i < head.rows.length; i++) {
+                row = head.rows[i];
+                for(j = 0; j < row.cells.length; j++){
+                    cell = row.cells[j];
+                    data += (j ? o.csvDelimiter : '') + cell.textContent.trim();
+                }
+                data += o.csvNewLine;
+            }
+        }
+
+        body = table.querySelectorAll("tbody")[0];
+
+        for(i = 0; i < body.rows.length; i++) {
+            row = body.rows[i];
+            for(j = 0; j < row.cells.length; j++){
+                cell = row.cells[j];
+                data += (j ? o.csvDelimiter : '') + cell.textContent.trim();
+            }
+            data += o.csvNewLine;
+        }
+
+        if (Utils.isValue(filename)) {
+            return this.createDownload(this.base64("\uFEFF" + data), 'application/csv', filename);
+        }
+
+        return data;
+    },
+
+    createDownload: function (data, contentType, filename) {
+        var blob, anchor, url;
+
+        anchor = document.createElement('a');
+        anchor.style.display = "none";
+        document.body.appendChild(anchor);
+
+        blob = this.b64toBlob(data, contentType);
+
+        url = window.URL.createObjectURL(blob);
+        anchor.href = url;
+        anchor.download = filename || Utils.elementId("download");
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(anchor);
+        return true;
+    }
+};
+
+Metro['export'] = Export.init();
+
+
 // Source: js/utils/extensions.js
 $.fn.extend({
     toggleAttr: function(a, v){
@@ -1667,6 +1786,33 @@ String.prototype.capitalize = function() {
 
 String.prototype.contains = function() {
     return !!~String.prototype.indexOf.apply(this, arguments);
+};
+
+String.prototype.toDate = function(format)
+{
+    var normalized      = this.replace(/[^a-zA-Z0-9]/g, '-');
+    var normalizedFormat= format.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+    var formatItems     = normalizedFormat.split('-');
+    var dateItems       = normalized.split('-');
+
+    var monthIndex  = formatItems.indexOf("mm");
+    var dayIndex    = formatItems.indexOf("dd");
+    var yearIndex   = formatItems.indexOf("yyyy");
+    var hourIndex     = formatItems.indexOf("hh");
+    var minutesIndex  = formatItems.indexOf("ii");
+    var secondsIndex  = formatItems.indexOf("ss");
+
+    var today = new Date();
+
+    var year  = yearIndex>-1  ? dateItems[yearIndex]    : today.getFullYear();
+    var month = monthIndex>-1 ? dateItems[monthIndex]-1 : today.getMonth()-1;
+    var day   = dayIndex>-1   ? dateItems[dayIndex]     : today.getDate();
+
+    var hour    = hourIndex>-1      ? dateItems[hourIndex]    : today.getHours();
+    var minute  = minutesIndex>-1   ? dateItems[minutesIndex] : today.getMinutes();
+    var second  = secondsIndex>-1   ? dateItems[secondsIndex] : today.getSeconds();
+
+    return new Date(year,month,day,hour,minute,second);
 };
 
 Date.prototype.format = function(format, locale){
@@ -1977,7 +2123,9 @@ var Locales = {
             "help": "Help",
             "yes": "Yes",
             "no": "No",
-            "random": "Random"
+            "random": "Random",
+            "save": "Save",
+            "reset": "Reset"
         }
     },
     
@@ -2012,7 +2160,9 @@ var Locales = {
             "help": "帮助",
             "yes": "是",
             "no": "否",
-            "random": "随机"
+            "random": "随机",
+            "save": "保存",
+            "reset": "重啟"
         }
     },
     
@@ -2045,7 +2195,9 @@ var Locales = {
             "help": "Hilfe",
             "yes": "Ja",
             "no": "Nein",
-            "random": "Zufällig"
+            "random": "Zufällig",
+            "save": "Sparen",
+            "reset": "Zurücksetzen"
         }
     },
 
@@ -2077,7 +2229,9 @@ var Locales = {
             "help": "Segítség",
             "yes": "Igen",
             "no": "Nem",
-            "random": "Véletlen"
+            "random": "Véletlen",
+            "save": "Mentés",
+            "reset": "Visszaállítás"
         }
     },
 
@@ -2109,7 +2263,9 @@ var Locales = {
             "help": "Помощь",
             "yes": "Да",
             "no": "Нет",
-            "random": "Случайно"
+            "random": "Случайно",
+            "save": "Сохранить",
+            "reset": "Сброс"
         }
     },
 
@@ -2141,7 +2297,9 @@ var Locales = {
             "help": "Допомога",
             "yes": "Так",
             "no": "Ні",
-            "random": "Випадково"
+            "random": "Випадково",
+            "save": "Зберегти",
+            "reset": "Скинути"
         }
     },
 
@@ -2176,7 +2334,9 @@ var Locales = {
             "help": "Ayuda",
             "yes": "Si",
             "no": "No",
-            "random": "Aleatorio"
+            "random": "Aleatorio",
+            "save": "Salvar",
+            "reset": "Reiniciar"
         }
     },
 
@@ -2211,7 +2371,9 @@ var Locales = {
             "help": "Aide",
             "yes": "Oui",
             "no": "Non",
-            "random": "Aléatoire"
+            "random": "Aléatoire",
+            "save": "Sauvegarder",
+            "reset": "Réinitialiser"
         }
     },
 
@@ -2246,7 +2408,9 @@ var Locales = {
             "help": "Aiuto",
             "yes": "Sì",
             "no": "No",
-            "random": "Random"
+            "random": "Random",
+            "save": "Salvare",
+            "reset": "Reset"
         }
     }
 };
@@ -3762,6 +3926,63 @@ var d = new Date().getTime();
 
     parseNumber: function(val, thousand, decimal){
         return val.replace(new RegExp('\\'+thousand, "g"), "").replace(new RegExp('\\'+decimal, 'g'), ".");
+    },
+
+    nearest: function(val, precision, down){
+        val /= precision;
+        val = Math[down === true ? 'floor' : 'ceil'](val) * precision;
+        return val;
+    },
+
+    bool: function(value){
+        switch(value){
+            case true:
+            case "true":
+            case 1:
+            case "1":
+            case "on":
+            case "yes":
+                return true;
+            default:
+                return false;
+        }
+    },
+
+    copy: function(el){
+        var body = document.body, range, sel;
+
+        if (this.isJQueryObject(el)) {
+            el = el[0];
+        }
+
+        if (document.createRange && window.getSelection) {
+            range = document.createRange();
+            sel = window.getSelection();
+            sel.removeAllRanges();
+            try {
+                range.selectNodeContents(el);
+                sel.addRange(range);
+            } catch (e) {
+                range.selectNode(el);
+                sel.addRange(range);
+            }
+        } else if (body.createTextRange) {
+            range = body.createTextRange();
+            range.moveToElementText(el);
+            range.select();
+        }
+
+        document.execCommand("Copy");
+
+        if (window.getSelection) {
+            if (window.getSelection().empty) {  // Chrome
+                window.getSelection().empty();
+            } else if (window.getSelection().removeAllRanges) {  // Firefox
+                window.getSelection().removeAllRanges();
+            }
+        } else if (document.selection) {  // IE?
+            document.selection.empty();
+        }
     }
 };
 
@@ -4817,6 +5038,7 @@ var Calendar = {
         headerFormat: "%A, %b %e",
         showHeader: true,
         showFooter: true,
+        showTimeField: true,
         clsCalendar: "",
         clsCalendarHeader: "",
         clsCalendarContent: "",
@@ -5434,13 +5656,6 @@ var Calendar = {
                 }
             }
         }
-
-        //var day_height = Utils.getStyleOne(element.parent().find(".calendar .days"), 'width');
-
-        // element.find(".days-row .day").css({
-        //     height: day_height,
-        //     lineHeight: day_height + 'px'
-        // });
     },
 
     _drawCalendar: function(){
@@ -5963,6 +6178,18 @@ var CalendarPicker = {
         cal.setExclude(element.attr("data-exclude"));
     },
 
+    changeAttrMinDate: function(){
+        var that = this, element = this.element, o = this.options;
+        var cal = this.calendar.data("calendar");
+        cal.setMinDate(element.attr("data-min-date"));
+    },
+
+    changeAttrMaxDate: function(){
+        var that = this, element = this.element, o = this.options;
+        var cal = this.calendar.data("calendar");
+        cal.setMaxDate(element.attr("data-max-date"));
+    },
+
     changeAttribute: function(attributeName){
         switch (attributeName) {
             case "value": this.changeValue(); break;
@@ -5970,6 +6197,8 @@ var CalendarPicker = {
             case 'data-locale': this.changeAttrLocale(); break;
             case 'data-special': this.changeAttrSpecial(); break;
             case 'data-exclude': this.changeAttrExclude(); break;
+            case 'data-min-date': this.changeAttrMinDate(); break;
+            case 'data-max-date': this.changeAttrMaxDate(); break;
         }
     }
 };
@@ -6983,7 +7212,12 @@ var Collapse = {
             } else {
                 that._open(element);
             }
-            e.preventDefault();
+
+            console.log(e.target.tagName);
+
+            if (["INPUT"].indexOf(e.target.tagName) === -1) {
+                e.preventDefault();
+            }
             e.stopPropagation();
         });
 
@@ -8411,6 +8645,8 @@ var Dialog = {
     },
 
     options: {
+        toTop: false,
+        toBottom: false,
         locale: METRO_LOCALE,
         title: "",
         content: "",
@@ -8588,9 +8824,24 @@ var Dialog = {
     },
 
     setPosition: function(){
-        var element = this.element;
+        var element = this.element, o = this.options;
+        var top, left, bottom;
+        if (o.toTop !== true && o.toBottom !== true) {
+            top = ( $(window).height() - element.outerHeight() ) / 2;
+            bottom = "auto";
+        } else {
+            if (o.toTop === true) {
+                top = 0;
+                bottom = "auto";
+            }
+            if (o.toTop !== true && o.toBottom === true) {
+                bottom = 0;
+                top = "auto";
+            }
+        }
         element.css({
-            top: ( $(window).height() - element.outerHeight() ) / 2,
+            top: top,
+            bottom: bottom,
             left: ( $(window).width() - element.outerWidth() ) / 2
         });
     },
@@ -9312,13 +9563,23 @@ var File = {
             element.trigger("click");
         });
         element.on(Metro.events.change, function(){
-            var val = $(this).val();
-            if (val !== '') {
-                val = val.replace(/.+[\\\/]/, "");
-                caption.html(val);
-                caption.attr('title', val);
-                Utils.exec(o.onSelect, [val, element], element[0]);
+            var fi = this;
+            var file_names = [];
+            var entry = "";
+            if (fi.files.length === 0) {
+                return ;
             }
+
+            Array.from(fi.files).forEach(function(file){
+                file_names.push(file.name);
+            });
+
+            entry = file_names.join(", ");
+
+            caption.html(entry);
+            caption.attr('title', entry);
+
+            Utils.exec(o.onSelect, [fi.files, element], element[0]);
         });
     },
 
@@ -9931,13 +10192,16 @@ var Input = {
         return this;
     },
     options: {
+        defaultValue: "",
         clsElement: "",
         clsInput: "",
         clsPrepend: "",
+        clsAppend: "",
         clsClearButton: "",
         clsRevealButton: "",
         size: "default",
         prepend: "",
+        append: "",
         copyInlineStyles: true,
         clearButton: true,
         revealButton: true,
@@ -9983,10 +10247,14 @@ var Input = {
         element.appendTo(container);
         buttons.appendTo(container);
 
+        if (!Utils.isValue(element.val().trim())) {
+            element.val(o.defaultValue);
+        }
+
         if (o.clearButton !== false) {
             clearButton = $("<button>").addClass("button input-clear-button").addClass(o.clsClearButton).attr("tabindex", -1).attr("type", "button").html(o.clearButtonIcon);
             clearButton.on(Metro.events.click, function(){
-                element.val("").trigger('change').trigger('keyup').focus();
+                element.val(Utils.isValue(o.defaultValue) ? o.defaultValue : "").trigger('change').trigger('keyup').focus();
             });
             clearButton.appendTo(buttons);
         }
@@ -10016,6 +10284,11 @@ var Input = {
                 });
                 customButton.appendTo(buttons);
             });
+        }
+
+        if (o.append !== "") {
+            var append = Utils.isTag(o.append) ? $(o.append) : $("<span>"+o.append+"</span>");
+            append.addClass("append").addClass(o.clsAppend).appendTo(container);
         }
 
         if (element.attr('dir') === 'rtl' ) {
@@ -10768,7 +11041,8 @@ var List = {
             })
         }
 
-        element.html("").addClass(o.clsList);
+        // element.html("").addClass(o.clsList);
+        element.addClass(o.clsList);
 
         this._createTopBlock();
         this._createBottomBlock();
@@ -11029,14 +11303,13 @@ var List = {
             stop = o.items === -1 ? this.items.length - 1 : start + o.items - 1;
         var items;
 
-        element.html("");
-
         items = this._filter();
+
+        element.children(o.sortTarget).remove();
 
         for (i = start; i <= stop; i++) {
             if (Utils.isValue(items[i])) {
-                items[i].className += " "+o.clsListItem;
-                element[0].appendChild(items[i]);
+                $(items[i]).addClass(o.clsListItem).appendTo(element);
             }
             Utils.exec(o.onDrawItem, [items[i]], element[0]);
         }
@@ -11060,15 +11333,15 @@ var List = {
 
         if (Utils.isValue(o.sortClass)) {
             data = "";
-            inset = item.getElementsByClassName(o.sortClass);
+            inset = $(item).find("."+o.sortClass);
 
             if (inset.length > 0) for (i = 0; i < inset.length; i++) {
                 data += inset[i].textContent;
             }
-            format = inset[0].dataset.format;
+            format = inset.length > 0 ? inset[0].getAttribute("data-format") : "";
         } else {
             data = item.textContent;
-            format = item.dataset.format;
+            format = item.getAttribute("data-format");
         }
 
         data = (""+data).toLowerCase().replace(/[\n\r]+|[\s]{2,}/g, ' ').trim();
@@ -13685,7 +13958,7 @@ var Select = {
         var element = this.element, o = this.options;
         var input = element.siblings("input");
 
-        l = $("<li>").addClass(o.clsOption).data("text", item.text).data('value', item.value ? item.value : item.text).appendTo(parent);
+        l = $("<li>").addClass(o.clsOption).data("text", item.text).data('value', Utils.isValue(item.value) ? item.value : "").appendTo(parent);
         a = $("<a>").html(item.text).appendTo(l).addClass(item.className);
 
         if (option.is(":selected")) {
@@ -15791,15 +16064,23 @@ var Table = {
         this.wrapperPagination = null;
         this.filterIndex = null;
         this.filtersIndexes = null;
+        this.component = null;
+        this.inspector = null;
+        this.view = {};
+        this.viewDefault = {};
+        this.locale = Metro.locales["en-US"];
 
         this.sort = {
             dir: "asc",
             colIndex: 0
         };
 
+        this.service = [];
         this.heads = [];
         this.items = [];
         this.foots = [];
+
+        this.filteredItems = [];
 
         this._setOptionsFromDOM();
         this._create();
@@ -15808,10 +16089,20 @@ var Table = {
     },
 
     options: {
+        locale: METRO_LOCALE,
+
+        check: false,
+        checkColIndex: 0,
+        checkName: null,
+        checkType: "checkbox",
+        checkStoreKey: "TABLE:$1:KEYS",
+        rownum: false,
 
         filter: null,
         filters: null,
         source: null,
+
+        filterMinLength: 1,
 
         showRowsSteps: true,
         showSearch: true,
@@ -15825,6 +16116,9 @@ var Table = {
         rows: 10,
         rowsSteps: "10,25,50,100",
 
+        viewSaveMode: "client",
+        viewSavePath: "TABLE:$1:OPTIONS",
+
         sortDir: "asc",
         decimalSeparator: ".",
         thousandSeparator: ",",
@@ -15835,6 +16129,7 @@ var Table = {
         paginationPrevTitle: "Prev",
         paginationNextTitle: "Next",
         allRecordsTitle: "All",
+        inspectorTitle: "Inspector",
 
         activityType: "cycle",
         activityStyle: "color",
@@ -15844,6 +16139,8 @@ var Table = {
         rowsWrapper: null,
         infoWrapper: null,
         paginationWrapper: null,
+
+        cellWrapper: true,
 
         clsComponent: "",
         clsTable: "",
@@ -15872,6 +16169,9 @@ var Table = {
 
         onDraw: Metro.noop,
         onDrawRow: Metro.noop,
+        onDrawCell: Metro.noop,
+        onAppendRow: Metro.noop,
+        onAppendCell: Metro.noop,
         onSortStart: Metro.noop,
         onSortStop: Metro.noop,
         onSortItemSwitch: Metro.noop,
@@ -15881,6 +16181,12 @@ var Table = {
         onDataLoaded: Metro.noop,
         onFilterRowAccepted: Metro.noop,
         onFilterRowDeclined: Metro.noop,
+        onCheckClick: Metro.noop,
+        onCheckClickAll: Metro.noop,
+        onCheckDraw: Metro.noop,
+        onViewSave: Metro.noop,
+        onViewGet: Metro.noop,
+        onViewCreated: Metro.noop,
         onTableCreate: Metro.noop
     },
 
@@ -15900,6 +16206,15 @@ var Table = {
 
     _create: function(){
         var that = this, element = this.element, o = this.options;
+        var id = Utils.elementId("table");
+
+        if (!Utils.isValue(element.attr("id"))) {
+            element.attr("id", id);
+        }
+
+        if (Utils.isValue(Metro.locales[o.locale])) {
+            this.locale = Metro.locales[o.locale];
+        }
 
         if (o.source !== null) {
             Utils.exec(o.onDataLoad, [o.source], element[0]);
@@ -15916,9 +16231,14 @@ var Table = {
     },
 
     _build: function(data){
-        var element = this.element, o = this.options;
+        var that = this, element = this.element, o = this.options;
+        var view, id = element.attr("id");
 
         o.rows = parseInt(o.rows);
+
+        this.items = [];
+        this.heads = [];
+        this.foots = [];
 
         if (Utils.isValue(data)) {
             this._createItemsFromJSON(data);
@@ -15926,31 +16246,196 @@ var Table = {
             this._createItemsFromHTML()
         }
 
+        this.view = this._createView();
+        this.viewDefault = Utils.objectClone(this.view);
+
+        if (o.viewSaveMode.toLowerCase() === "client") {
+            view = Metro.storage.getItem(o.viewSavePath.replace("$1", id));
+            if (Utils.isValue(view) && Utils.objectLength(view) === Utils.objectLength(this.view)) {
+                this.view = view;
+                Utils.exec(o.onViewGet, [view], element[0]);
+            }
+            this._final();
+        } else {
+            $.get(
+                o.viewSavePath,
+                {
+                    id: id
+                },
+                function(view){
+                    if (Utils.isValue(view) && Utils.objectLength(view) === Utils.objectLength(that.view)) {
+                        that.view = view;
+                        Utils.exec(o.onViewGet, [view], element[0]);
+                    }
+                    that._final();
+                }
+            ).fail(function(jqXHR, textStatus) {
+                that._final();
+                console.log("Warning! View " + textStatus + " for table " + element.attr('id') + " ");
+            });
+        }
+    },
+
+    _final: function(){
+        var element = this.element, o = this.options;
+        var id = element.attr("id");
+
+        Metro.storage.delItem(o.checkStoreKey.replace("$1", id));
+
+        this._service();
         this._createStructure();
+        this._createInspector();
         this._createEvents();
 
         Utils.exec(o.onTableCreate, [element], element[0]);
     },
 
-    _createItemsFromHTML: function(){
-        var that = this, element = this.element;
-        var body = element.find("tbody");
-        var head = element.find("thead");
-        var foot = element.find("tfoot");
+    _service: function(){
+        var o = this.options;
+        var item_check, item_rownum;
+        var service = [];
 
-        this.items = [];
-        this.heads = [];
-        this.foots = [];
+        item_rownum = {
+            title: "#",
+            format: undefined,
+            name: undefined,
+            sortable: false,
+            sortDir: undefined,
+            clsColumn: o.rownum !== true ? "d-none" : "",
+            cls: o.rownum !== true ? "d-none" : "",
+            colspan: undefined,
+            type: "rownum"
+        };
 
-        if (body.length > 0) $.each(body.find("tr"), function(){
-            var row = $(this);
-            var tr = [];
-            $.each(row.children("td"), function(){
-                var td = $(this);
-                tr.push(td.html());
-            });
-            that.items.push(tr);
+        item_check = {
+            title: o.checkType === "checkbox" ? "<input type='checkbox' data-role='checkbox' class='table-service-check-all'>" : "",
+            format: undefined,
+            name: undefined,
+            sortable: false,
+            sortDir: undefined,
+            clsColumn: o.check !== true ? "d-none" : "",
+            cls: o.check !== true ? "d-none" : "",
+            colspan: undefined,
+            type: "rowcheck"
+        };
+
+        service.push(item_rownum);
+        service.push(item_check);
+
+        this.service = service;
+    },
+
+    _createView: function(){
+        var view, o = this.options;
+
+        view = {};
+
+        $.each(this.heads, function(i){
+
+            if (Utils.isValue(this.cls)) {this.cls = this.cls.replace("hidden", "");}
+            if (Utils.isValue(this.clsColumn)) {this.clsColumn = this.clsColumn.replace("hidden", "");}
+
+            view[i] = {
+                "index": i,
+                "index-view": i,
+                "show": !Utils.isValue(this.show) ? true : this.show,
+                "size": Utils.isValue(this.size) ? this.size : ""
+            }
         });
+
+        Utils.exec(o.onViewCreated, [view], view);
+        return view;
+    },
+
+    _createInspector: function(){
+        var that = this, o = this.options;
+        var component = this.component;
+        var inspector, table = $("<table>").addClass("table compact"), row, actions, tds = [], cells, j;
+
+        inspector = $("<div data-role='draggable' data-drag-element='h3' data-drag-area='body'>").addClass("table-inspector");
+
+        $("<h3 class='text-light'>"+o.inspectorTitle+"</h3>").appendTo(inspector);
+        $("<hr class='thin bg-lightGray'>").appendTo(inspector);
+
+        table.appendTo(inspector);
+
+        cells = this.heads;
+
+        for (j = 0; j < cells.length; j++){
+            tds[j] = null;
+        }
+
+        $.each(cells, function(i){
+            row = $("<tr>");
+            row.data('index', i);
+            row.data('index-view', i);
+            $("<td>").html("<input type='checkbox' data-role='checkbox' name='column_show_check[]' value='"+i+"' "+(Utils.bool(that.view[i]['show']) ? "checked" : "")+">").appendTo(row);
+            $("<td>").html(this.title).appendTo(row);
+            $("<td>").html("<input type='number' name='column_size' value='"+that.view[i]['size']+"' data-index='"+i+"'>").appendTo(row);
+            $("<td>").html("" +
+                "<button class='button mini js-table-inspector-field-up' type='button'><span class='mif-arrow-up'></span></button>" +
+                "<button class='button mini js-table-inspector-field-down' type='button'><span class='mif-arrow-down'></span></button>" +
+                "").appendTo(row);
+            tds[that.view[i]['index-view']] = row;
+        });
+
+        //
+        for (j = 0; j < cells.length; j++){
+            tds[j].appendTo(table);
+        }
+
+        $("<hr class='thin bg-lightGray'>").appendTo(inspector);
+        actions = $("<div class='inspector-actions'>").appendTo(inspector);
+        $("<button class='button primary js-table-inspector-save' type='button'>").html(this.locale.buttons.save).appendTo(actions);
+        $("<button class='button secondary js-table-inspector-reset ml-2 mr-2' type='button'>").html(this.locale.buttons.reset).appendTo(actions);
+        $("<button class='button link js-table-inspector-cancel place-right' type='button'>").html(this.locale.buttons.cancel).appendTo(actions);
+
+        this.inspector = inspector;
+
+        component.append(inspector);
+
+        this._createInspectorEvents();
+    },
+
+    _resetInspector: function(){
+        var that = this;
+        var inspector = this.inspector;
+        var table = inspector.find("table");
+        var tds = [], cells, j, row;
+        var view = this.view;
+
+        table.html("");
+        cells = this.heads;
+
+        for (j = 0; j < cells.length; j++){
+            tds[j] = null;
+        }
+
+        $.each(cells, function(i){
+            row = $("<tr>");
+            row.data('index', i);
+            row.data('index-view', i);
+            $("<td>").html("<input type='checkbox' data-role='checkbox' name='column_show_check[]' value='"+i+"' "+(Utils.bool(view[i]['show']) ? "checked" : "")+">").appendTo(row);
+            $("<td>").html(this.title).appendTo(row);
+            $("<td>").html("<input type='number' name='column_size' value='"+view[i]['size']+"' data-index='"+i+"'>").appendTo(row);
+            $("<td>").html("" +
+                "<button class='button mini js-table-inspector-field-up' type='button'><span class='mif-arrow-up'></span></button>" +
+                "<button class='button mini js-table-inspector-field-down' type='button'><span class='mif-arrow-down'></span></button>" +
+                "").appendTo(row);
+            tds[view[i]['index-view']] = row;
+        });
+
+        //
+        for (j = 0; j < cells.length; j++){
+            tds[j].appendTo(table);
+        }
+
+        this._createInspectorEvents();
+    },
+
+    _createHeadsFormHTML: function(){
+        var that = this, element = this.element;
+        var head = element.find("thead");
 
         if (head.length > 0) $.each(head.find("tr > *"), function(){
             var item = $(this);
@@ -15976,10 +16461,17 @@ var Table = {
                 sortDir: dir,
                 clsColumn: Utils.isValue(item.data("cls-column")) ? item.data("cls-column") : "",
                 cls: item_class,
-                colspan: item.attr("colspan")
+                colspan: item.attr("colspan"),
+                type: "data",
+                size: Utils.isValue(item.data("size")) ? item.data("size") : ""
             };
             that.heads.push(head_item);
         });
+    },
+
+    _createFootsFromHTML: function(){
+        var that = this, element = this.element;
+        var foot = element.find("tfoot");
 
         if (foot.length > 0) $.each(foot.find("tr > *"), function(){
             var item = $(this);
@@ -15994,18 +16486,33 @@ var Table = {
 
             that.foots.push(foot_item);
         });
+    },
 
+    _createItemsFromHTML: function(){
+        var that = this, element = this.element;
+        var body = element.find("tbody");
+
+        if (body.length > 0) $.each(body.find("tr"), function(){
+            var row = $(this);
+            var tr = [];
+            $.each(row.children("td"), function(){
+                var td = $(this);
+                tr.push(td.html());
+            });
+            that.items.push(tr);
+        });
+
+        this._createHeadsFormHTML();
+        this._createFootsFromHTML();
     },
 
     _createItemsFromJSON: function(source){
         var that = this;
 
-        this.items = [];
-        this.heads = [];
-        this.foots = [];
-
         if (source.header !== undefined) {
             that.heads = source.header;
+        } else {
+            this._createHeadsFormHTML();
         }
 
         if (source.data !== undefined) {
@@ -16022,13 +16529,18 @@ var Table = {
 
         if (source.footer !== undefined) {
             this.foots = source.footer;
+        } else {
+            this._createFootsFromHTML();
         }
     },
 
     _createTableHeader: function(){
-        var o = this.options;
-        var head = $("<thead>");
-        var tr, th;
+        var element = this.element, o = this.options;
+        var head = $("<thead>").html('');
+        var tr, th, tds = [], j, cells;
+        var view = this.view;
+
+        element.find("thead").remove();
 
         head.addClass(o.clsHead);
 
@@ -16037,58 +16549,96 @@ var Table = {
         }
 
         tr = $("<tr>").addClass(o.clsHeadRow).appendTo(head);
-        $.each(this.heads, function(){
-            var item = this;
+
+        $.each(this.service, function(){
+            var item = this, classes = [];
             th = $("<th>").appendTo(tr);
-            if (item.sortable === true) {
-                th.addClass("sortable-column");
-                if (item.sortDir !== undefined) {
-                    th.addClass("sort-" + item.sortDir);
-                }
-            }
-            if (item.title !== undefined) {
-                th.html(item.title);
-            }
-            if (item.format !== undefined) {
-                th.attr("data-format", item.format);
-            }
-            if (item.name !== undefined) {
-                th.addClass("column-name-" + item.name);
-            }
-            if (item.size !== undefined) {
-                th.css({
-                    width: item.size
-                })
-            }
-            if (item.cls !== undefined) {
-                th.addClass(item.cls);
-            }
-
-            if (Utils.isValue(item.colspan)) {
-                th.attr("colspan", item.colspan);
-            }
-
-            th.addClass(o.clsHeadCell);
+            if (Utils.isValue(item.title)) {th.html(item.title);}
+            if (Utils.isValue(item.size)) {th.css({width: item.size});}
+            if (Utils.isValue(item.cls)) {classes.push(item.cls);}
+            if (item.type === 'rowcheck') {classes.push("check-cell");}
+            if (item.type === 'rownum') {classes.push("rownum-cell");}
+            classes.push(o.clsHeadCell);
+            th.addClass(classes.join(" "));
         });
 
-        return head;
+        cells = this.heads;
+
+        for (j = 0; j < cells.length; j++){
+            tds[j] = null;
+        }
+
+        $.each(cells, function(cell_index){
+            var item = this;
+            var classes = [];
+
+            th = $("<th>");
+            th.data("index", cell_index);
+
+            if (Utils.isValue(item.title)) {th.html(item.title);}
+            if (Utils.isValue(item.format)) {th.attr("data-format", item.format);}
+            if (Utils.isValue(item.name)) {th.attr("data-name", item.name);}
+            if (Utils.isValue(item.colspan)) {th.attr("colspan", item.colspan);}
+            if (Utils.isValue(view[cell_index]['size'])) {th.css({
+                    width: view[cell_index]['size']
+                })
+            }
+            if (item.sortable === true) {
+                classes.push("sortable-column");
+
+                if (Utils.isValue(item.sortDir)) {
+                    classes.push("sort-" + item.sortDir);
+                }
+            }
+            if (Utils.isValue(item.cls)) {classes.push(item.cls);}
+            if (Utils.bool(view[cell_index]['show']) === false) {
+                classes.push("hidden");
+            }
+
+            if (item.type === 'rowcheck') {classes.push("check-cell");}
+            if (item.type === 'rownum') {classes.push("rownum-cell");}
+
+            classes.push(o.clsHeadCell);
+
+            if (Utils.bool(view[cell_index]['show'])) {
+                Utils.arrayDelete(classes, "hidden");
+            }
+
+            th.addClass(classes.join(" "));
+
+            tds[view[cell_index]['index-view']] = th;
+        });
+
+        for (j = 0; j < cells.length; j++){
+            tds[j].appendTo(tr);
+        }
+
+        element.prepend(head);
     },
 
     _createTableBody: function(){
-        return $("<tbody>").addClass(this.options.clsBody);
+        var body, head, element = this.element;
+
+        head  = element.find("thead");
+        element.find("tbody").remove();
+        body = $("<tbody>").addClass(this.options.clsBody);
+        body.insertAfter(head);
     },
 
     _createTableFooter: function(){
-        var that = this, o = this.options;
+        var element = this.element, o = this.options;
         var foot = $("<tfoot>").addClass(o.clsFooter);
         var tr, th;
 
+        element.find("tfoot").remove();
+
         if (this.foots.length === 0) {
-            return foot;
+            element.append(foot);
+            return;
         }
 
         tr = $("<tr>").addClass(o.clsHeadRow).appendTo(foot);
-        $.each(this.foots, function(i){
+        $.each(this.foots, function(){
             var item = this;
             th = $("<th>").appendTo(tr);
 
@@ -16111,7 +16661,7 @@ var Table = {
             th.appendTo(tr);
         });
 
-        return foot;
+        element.append(foot);
     },
 
     _createTopBlock: function (){
@@ -16213,9 +16763,9 @@ var Table = {
 
         element.html("").addClass(o.clsTable);
 
-        element.append(this._createTableHeader());
-        element.append(this._createTableBody());
-        element.append(this._createTableFooter());
+        this._createTableHeader();
+        this._createTableBody();
+        this._createTableFooter();
 
         this._createTopBlock();
         this._createBottomBlock();
@@ -16233,7 +16783,7 @@ var Table = {
         if (need_sort) {
             columns = element.find("thead th");
             this._resetSortClass(columns);
-            $(columns.get(this.sort.colIndex)).addClass("sort-"+this.sort.dir);
+            $(columns.get(this.sort.colIndex + that.service.length)).addClass("sort-"+this.sort.dir);
             this.sorting();
         }
 
@@ -16258,6 +16808,7 @@ var Table = {
 
         this.currentPage = 1;
 
+        this.component = table_component;
         this._draw();
     },
 
@@ -16270,6 +16821,7 @@ var Table = {
         var component = element.parent();
         var search = component.find(".table-search-block input");
         var customSearch;
+        var id = element.attr("id");
 
         element.on(Metro.events.click, ".sortable-column", function(){
 
@@ -16284,7 +16836,7 @@ var Table = {
 
             that.activity.show(o.activityTimeout, function(){
                 that.currentPage = 1;
-                that.sort.colIndex = col.index();
+                that.sort.colIndex = col.data("index");
                 if (!col.has("sort-asc") && !col.hasClass("sort-desc")) {
                     that.sort.dir = o.sortDir;
                 } else {
@@ -16304,26 +16856,71 @@ var Table = {
             });
         });
 
-        search.on(Metro.events.inputchange, function(){
+        element.on(Metro.events.click, ".table-service-check input", function(){
+            var check = $(this);
+            var status = check.is(":checked");
+            var val = ""+check.val();
+            var store_key = o.checkStoreKey.replace("$1", id);
+            var storage = Metro.storage;
+            var data = storage.getItem(store_key);
+
+            if (status) {
+                if (!Utils.isValue(data)) {
+                    data = [val];
+                } else {
+                    if (Array(data).indexOf(val) === -1) {
+                        data.push(val);
+                    }
+                }
+            } else {
+                if (Utils.isValue(data)) {
+                    Utils.arrayDelete(data, val);
+                } else {
+                    data = [];
+                }
+            }
+
+            storage.setItem(store_key, data);
+
+            Utils.exec(o.onCheckClick, [status], this);
+        });
+
+        element.on(Metro.events.click, ".table-service-check-all input", function(){
+            var status = $(this).is(":checked");
+            var store_key = o.checkStoreKey.replace("$1", id);
+            var data = [];
+
+            if (status) {
+                $.each(that.filteredItems, function(){
+                    if (data.indexOf(this[o.checkColIndex]) !== -1) return ;
+                    data.push(""+this[o.checkColIndex]);
+                });
+            } else {
+                data = [];
+            }
+
+            Metro.storage.setItem(store_key, data);
+
+            that._draw();
+
+            Utils.exec(o.onCheckClickAll, [status], this);
+        });
+
+        var _search = function(){
             that.filterString = this.value.trim().toLowerCase();
             if (that.filterString[that.filterString.length - 1] === ":") {
                 return ;
             }
             that.currentPage = 1;
             that._draw();
-        });
+        };
+
+        search.on(Metro.events.inputchange, _search);
 
         if (Utils.isValue(this.wrapperSearch)) {
             customSearch = this.wrapperSearch.find("input");
             if (customSearch.length > 0) {
-                customSearch.on(Metro.events.inputchange, function(){
-                    that.filterString = this.value.trim().toLowerCase();
-                    if (that.filterString[that.filterString.length - 1] === ":") {
-                        return ;
-                    }
-                    that.currentPage = 1;
-                    that._draw();
-                });
+                customSearch.on(Metro.events.inputchange, _search);
             }
         }
 
@@ -16362,6 +16959,160 @@ var Table = {
             this.wrapperPagination.on(Metro.events.click, ".pagination .page-link", function(){
                 pageLinkClick(this)
             });
+        }
+
+        this._createInspectorEvents();
+    },
+
+    _createInspectorEvents: function(){
+        var that = this, inspector = this.inspector;
+        // Inspector event
+
+        this._removeInspectorEvents();
+
+        inspector.on(Metro.events.click, ".js-table-inspector-field-up", function(){
+            var button = $(this), tr = button.closest("tr");
+            var tr_prev = tr.prev("tr");
+            var index = tr.data("index");
+            var index_view;
+            if (tr_prev.length === 0) {
+                return ;
+            }
+            tr.insertBefore(tr_prev);
+            tr.addClass("flash");
+            setTimeout(function(){
+                tr.removeClass("flash");
+            }, 1000);
+            index_view = tr.index();
+
+            tr.data("index-view", index_view);
+            that.view[index]['index-view'] = index_view;
+
+            $.each(tr.nextAll(), function(){
+                var t = $(this);
+                index_view++;
+                t.data("index-view", index_view);
+                that.view[t.data("index")]['index-view'] = index_view;
+            });
+
+            that._createTableHeader();
+            that._draw();
+        });
+
+        inspector.on(Metro.events.click, ".js-table-inspector-field-down", function(){
+            var button = $(this), tr = button.closest("tr");
+            var tr_next = tr.next("tr");
+            var index = tr.data("index");
+            var index_view;
+            if (tr_next.length === 0) {
+                return ;
+            }
+            tr.insertAfter(tr_next);
+            tr.addClass("flash");
+            setTimeout(function(){
+                tr.removeClass("flash");
+            }, 1000);
+            index_view = tr.index();
+
+            tr.data("index-view", index_view);
+            that.view[index]['index-view'] = index_view;
+
+            $.each(tr.prevAll(), function(){
+                var t = $(this);
+                index_view--;
+                t.data("index-view", index_view);
+                that.view[t.data("index")]['index-view'] = index_view;
+            });
+
+            that._createTableHeader();
+            that._draw();
+        });
+
+        inspector.on(Metro.events.click, "input[type=checkbox]", function(){
+            var check = $(this);
+            var status = check.is(":checked");
+            var index = check.val();
+            var op = ['cls', 'clsColumn'];
+
+            if (status) {
+                $.each(op, function(){
+                    var a;
+                    a = Utils.isValue(that.heads[index][this]) ? Utils.strToArray(that.heads[index][this]) : [];
+                    Utils.arrayDelete(a, "hidden");
+                    that.heads[index][this] = a.join(" ");
+                    that.view[index]['show'] = true;
+                });
+            } else {
+                $.each(op, function(){
+                    var a;
+
+                    a = Utils.isValue(that.heads[index][this]) ? Utils.strToArray(that.heads[index][this]) : [];
+                    if (a.indexOf("hidden") === -1) {
+                        a.push("hidden");
+                    }
+                    that.heads[index][this] = a.join(" ");
+                    that.view[index]['show'] = false;
+                });
+            }
+
+            that._createTableHeader();
+            that._draw();
+        });
+
+        inspector.find("input[type=number]").on(Metro.events.inputchange, function(){
+            var input = $(this);
+            var index = input.attr("data-index");
+            var val = parseInt(input.val());
+
+            that.view[index]['size'] = val === 0 ? "" : val;
+
+            that._createTableHeader();
+        });
+
+        inspector.on(Metro.events.click, ".js-table-inspector-save", function(){
+            that._saveTableView();
+            that.openInspector(false);
+        });
+
+        inspector.on(Metro.events.click, ".js-table-inspector-cancel", function(){
+            that.openInspector(false);
+        });
+
+        inspector.on(Metro.events.click, ".js-table-inspector-reset", function(e){
+            that.resetView();
+        });
+    },
+
+    _removeInspectorEvents: function(){
+        var inspector = this.inspector;
+        inspector.off(Metro.events.click, ".js-table-inspector-field-up");
+        inspector.off(Metro.events.click, ".js-table-inspector-field-down");
+        inspector.off(Metro.events.click, "input[type=checkbox]");
+        inspector.off(Metro.events.click, ".js-table-inspector-save");
+        inspector.off(Metro.events.click, ".js-table-inspector-cancel");
+        inspector.off(Metro.events.click, ".js-table-inspector-reset");
+        inspector.find("input[type=number]").off(Metro.events.inputchange);
+    },
+
+    _saveTableView: function(){
+        var element = this.element, o = this.options;
+        var view = this.view;
+        var id = element.attr("id");
+
+        if (o.viewSaveMode.toLowerCase() === "client") {
+            Metro.storage.setItem(o.viewSavePath.replace("$1", id), view);
+            Utils.exec(o.onViewSave, [o.viewSavePath, view], element[0]);
+        } else {
+            $.post(
+                o.viewSavePath,
+                {
+                    id : element.attr("id"),
+                    view : view
+                },
+                function(data, status, xhr){
+                    Utils.exec(o.onViewSave, [o.viewSavePath, view, data, status, xhr], element[0]);
+                }
+            );
         }
     },
 
@@ -16474,20 +17225,10 @@ var Table = {
         }
     },
 
-    _draw: function(cb){
-        var that = this, element = this.element, o = this.options;
-        var body = element.find("tbody");
-        var i;
-        var start = parseInt(o.rows) === -1 ? 0 : o.rows * (this.currentPage - 1),
-            stop = parseInt(o.rows) === -1 ? this.items.length - 1 : start + o.rows - 1;
-        var items;
-        var flt, idx = -1;
-
-        console.log(start, stop, this.currentPage, o.rows, this.items.length);
-
-        body.html("");
-
-        if (Utils.isValue(this.filterString) || this.filters.length > 0) {
+    _filter: function(){
+        var that = this, o = this.options, element = this.element;
+        var items, flt, idx = -1, i;
+        if ((Utils.isValue(this.filterString) && that.filterString.length >= o.filterMinLength) || this.filters.length > 0) {
             flt = this.filterString.split(":");
             if (flt.length > 1) {
                 $.each(that.heads, function (i, v) {
@@ -16499,11 +17240,12 @@ var Table = {
             items = this.items.filter(function(row){
                 var row_data = "" + (flt.length > 1 && idx > -1 ? row[idx] : row.join());
                 var c1 = row_data.replace(/[\n\r]+|[\s]{2,}/g, ' ').trim().toLowerCase();
-                var result = Utils.isValue(that.filterString) ? c1.indexOf(flt.length > 1 ? flt[1] : flt[0]) > -1 : true;
+                var result = Utils.isValue(that.filterString) && that.filterString.length >= o.filterMinLength ? ~c1.indexOf(flt.length > 1 ? flt[1] : flt[0]) : true;
 
                 if (result === true && that.filters.length > 0) {
                     for (i = 0; i < that.filters.length; i++) {
-                        if (Utils.exec(that.filters[i], [row]) !== true) {
+                        if (!Utils.isValue(that.filters[i])) continue;
+                        if (Utils.exec(that.filters[i], [row, that.heads]) !== true) {
                             result = false;
                             break;
                         }
@@ -16524,27 +17266,105 @@ var Table = {
             items = this.items;
         }
 
+        this.filteredItems = items;
+
+        return items;
+    },
+
+    _draw: function(cb){
+        var that = this, element = this.element, o = this.options;
+        var body = element.find("tbody");
+        var i;
+        var start = parseInt(o.rows) === -1 ? 0 : o.rows * (this.currentPage - 1),
+            stop = parseInt(o.rows) === -1 ? this.items.length - 1 : start + o.rows - 1;
+        var items;
+        var stored_keys = Metro.storage.getItem(o.checkStoreKey.replace("$1", element.attr('id')));
+        var view = this.view;
+
+        body.html("");
+
+        items = this._filter();
+
         for (i = start; i <= stop; i++) {
-            var tr;
+            var j, tr, td, check, cells = [], tds = [];
             if (Utils.isValue(items[i])) {
                 tr = $("<tr>").addClass(o.clsBodyRow);
-                $.each(items[i], function(cell_i){
-                    var td = $("<td>").html(this);
-                    td.addClass(o.clsBodyCell);
-                    if (that.heads[cell_i].clsColumn !== undefined) {
-                        td.addClass(that.heads[cell_i].clsColumn);
+
+                // Rownum
+                td = $("<td>").html(i + 1);
+                if (that.service[0].clsColumn !== undefined) {
+                    td.addClass(that.service[0].clsColumn);
+                }
+                td.appendTo(tr);
+
+                // Checkbox
+                td = $("<td>");
+                if (o.checkType === "checkbox") {
+                    check = $("<input type='checkbox' data-role='checkbox' name='" + (Utils.isValue(o.checkName) ? o.checkName : 'table_row_check') + "[]' value='" + items[i][o.checkColIndex] + "'>");
+                } else {
+                    check = $("<input type='radio' data-role='radio' name='" + (Utils.isValue(o.checkName) ? o.checkName : 'table_row_check') + "' value='" + items[i][o.checkColIndex] + "'>");
+                }
+
+                if (Utils.isValue(stored_keys) && Array.isArray(stored_keys) && stored_keys.indexOf(""+items[i][o.checkColIndex]) > -1) {
+                    check.prop("checked", true);
+                }
+
+                check.addClass("table-service-check");
+                Utils.exec(o.onCheckDraw, [check], check[0]);
+                check.appendTo(td);
+                if (that.service[1].clsColumn !== undefined) {
+                    td.addClass(that.service[1].clsColumn);
+                }
+                td.appendTo(tr);
+
+                cells = items[i];
+
+                for (j = 0; j < cells.length; j++){
+                    tds[j] = null;
+                }
+
+                $.each(cells, function(cell_index){
+                    var cell_wrapper;
+                    if (o.cellWrapper === true) {
+                        td = $("<td>");
+                        cell_wrapper = $("<div>").addClass("cell-wrapper").html(this).appendTo(td);
+                    } else {
+                        td = $("<td>").html(this);
                     }
-                    td.appendTo(tr);
+                    td.addClass(o.clsBodyCell);
+                    if (Utils.isValue(that.heads[cell_index].clsColumn)) {
+                        td.addClass(that.heads[cell_index].clsColumn);
+                    }
+
+                    if (Utils.bool(view[cell_index].show) === false) {
+                        td.addClass("hidden");
+                    }
+
+                    if (Utils.bool(view[cell_index].show)) {
+                        td.removeClass("hidden");
+                    }
+
+                    tds[view[cell_index]['index-view']] = td;
+                    Utils.exec(o.onDrawCell, [td, this, cell_index, that.heads[cell_index]], td[0]);
                 });
+
+                for (j = 0; j < cells.length; j++){
+                    tds[j].appendTo(tr);
+                    Utils.exec(o.onAppendCell, [tds[j], tr, j, element], tds[j][0])
+                }
+
+                Utils.exec(o.onDrawRow, [tr, that.view, that.heads, element], tr[0]);
+
                 tr.appendTo(body);
-                Utils.exec(o.onDrawRow, [tr], element[0]);
+
+                Utils.exec(o.onAppendRow, [tr, element], tr[0]);
             }
         }
 
         this._info(start + 1, stop + 1, items.length);
         this._paging(items.length);
 
-        this.activity.hide();
+        if (this.activity) this.activity.hide();
 
         Utils.exec(o.onDraw, [element], element[0]);
 
@@ -16554,8 +17374,12 @@ var Table = {
     },
 
     _getItemContent: function(row){
+
+        // console.log(this.sort);
+
         var result, col = row[this.sort.colIndex];
         var format = this.heads[this.sort.colIndex].format;
+        var formatMask = this.heads[this.sort.colIndex].formatMask;
         var o = this.options;
 
         result = (""+col).toLowerCase().replace(/[\n\r]+|[\s]{2,}/g, ' ').trim();
@@ -16567,7 +17391,7 @@ var Table = {
             }
 
             switch (format) {
-                case "date": result = Utils.isDate(result) ? new Date(result) : ""; break;
+                case "date": result = Utils.isValue(formatMask) ? result.toDate(formatMask) : new Date(result); break;
                 case "number": result = Number(result); break;
                 case "int": result = parseInt(result); break;
                 case "float": result = parseFloat(result); break;
@@ -16585,7 +17409,7 @@ var Table = {
     sorting: function(dir){
         var that = this, element = this.element, o = this.options;
 
-        if (dir !== undefined && dir !== null) {
+        if (Utils.isValue(dir)) {
             this.sort.dir = dir;
         }
 
@@ -16619,28 +17443,20 @@ var Table = {
         this._draw();
     },
 
-    loadData: function(source){
+    loadData: function(source, review){
         var that = this, element = this.element, o = this.options;
+        var need_sort = false;
+        var sortable_columns;
 
-        if (Utils.isValue(source) !== true) {
-            return ;
-        }
+        function redraw(){
 
-        o.source = source;
+            if (review === true) {
+                that.view = that._createView();
+            }
 
-        Utils.exec(o.onDataLoad, [o.source], element[0]);
-
-        $.get(o.source, function(data){
-            var need_sort = false;
-            var sortable_columns;
-
-            that._createItemsFromJSON(data);
-
-            element.html("");
-
-            element.append(that._createTableHeader());
-            element.append(that._createTableBody());
-            element.append(that._createTableFooter());
+            that._createTableHeader();
+            that._createTableBody();
+            that._createTableFooter();
 
             if (that.heads.length > 0) $.each(that.heads, function(i){
                 var item = this;
@@ -16661,11 +17477,39 @@ var Table = {
             that.currentPage = 1;
 
             that._draw();
+        }
 
-            Utils.exec(o.onDataLoaded, [o.source, data], element[0]);
-        }).fail(function( jqXHR, textStatus, errorThrown) {
-            console.log(textStatus); console.log(jqXHR); console.log(errorThrown);
-        });
+        element.html("");
+
+        if (!Utils.isValue(source)) {
+
+            // this._createItemsFromHTML();
+            redraw();
+
+        } else {
+            o.source = source;
+
+            Utils.exec(o.onDataLoad, [o.source], element[0]);
+
+            $.get(o.source, function(data){
+
+                that.items = [];
+                that.heads = [];
+                that.foots = [];
+
+                that._createItemsFromJSON(data);
+
+                redraw();
+
+                Utils.exec(o.onDataLoaded, [o.source, data], element[0]);
+            }).fail(function( jqXHR, textStatus, errorThrown) {
+                console.log(textStatus); console.log(jqXHR); console.log(errorThrown);
+            });
+        }
+    },
+
+    reload: function(review){
+        this.loadData(this.options.source, review);
     },
 
     next: function(){
@@ -16729,7 +17573,7 @@ var Table = {
     },
 
     removeFilter: function(key, redraw){
-        Utils.arrayDeleteByKey(this.filters, key);
+        this.filters[key] = null;
         if (redraw === true) {
             this.currentPage = 1;
             this.draw();
@@ -16745,6 +17589,51 @@ var Table = {
         }
     },
 
+    getItems: function(){
+        return this.items;
+    },
+
+    getHeads: function(){
+        return this.heads;
+    },
+
+    getView: function(){
+        return this.view;
+    },
+
+    getFilteredItems: function(){
+        return this.filteredItems.length > 0 ? this.filteredItems : this.items;
+    },
+
+    getSelectedItems: function(){
+        var element = this.element, o = this.options;
+        var stored_keys = Metro.storage.getItem(o.checkStoreKey.replace("$1", element.attr("id")));
+        var selected = [];
+
+        if (!Utils.isValue(stored_keys)) {
+            return [];
+        }
+
+        $.each(this.items, function(){
+            if (stored_keys.indexOf(""+this[o.checkColIndex]) !== -1) {
+                selected.push(this);
+            }
+        });
+        return selected;
+    },
+
+    getStoredKeys: function(){
+        var element = this.element, o = this.options;
+        return Metro.storage.getItem(o.checkStoreKey.replace("$1", element.attr("id")), []);
+    },
+
+    clearSelected: function(redraw){
+        var element = this.element, o = this.options;
+        Metro.storage.setItem(o.checkStoreKey.replace("$1", element.attr("id")), []);
+        element.find("table-service-check-all input").prop("checked", false);
+        if (redraw === true) this._draw();
+    },
+
     getFilters: function(){
         return this.filters;
     },
@@ -16757,11 +17646,113 @@ var Table = {
         return this.filtersIndexes;
     },
 
-    changeAttribute: function(attributeName){
-
+    openInspector: function(mode){
+        this.inspector[mode ? "addClass" : "removeClass"]("open");
     },
 
-    destroy: function(){}
+    toggleInspector: function(){
+        this.inspector.toggleClass("open");
+    },
+
+    resetView: function(){
+
+        this.view = this._createView();
+
+        this._createTableHeader();
+        this._createTableFooter();
+        this._draw();
+
+        this._resetInspector();
+        this._saveTableView();
+    },
+
+    export: function(to, mode, filename, options){
+        var that = this, o = this.options;
+        var table = document.createElement("table");
+        var head = $("<thead>").appendTo(table);
+        var body = $("<tbody>").appendTo(table);
+        var i, j, cells, tds = [], items, tr, td;
+        var start, stop;
+
+        mode = Utils.isValue(mode) ? mode.toLowerCase() : "all-filtered";
+        filename = Utils.isValue(filename) ? filename : Utils.elementId("table")+"-export.csv";
+
+        // Create table header
+        tr = $("<tr>");
+        cells = this.heads;
+
+        for (j = 0; j < cells.length; j++){
+            tds[j] = null;
+        }
+
+        $.each(cells, function(cell_index){
+            var item = this;
+            if (Utils.bool(that.view[cell_index]['show']) === false) {
+                return ;
+            }
+            td = $("<th>");
+            if (Utils.isValue(item.title)) {
+                td.html(item.title);
+            }
+            tds[that.view[cell_index]['index-view']] = td;
+        });
+
+        for (j = 0; j < cells.length; j++){
+            if (Utils.isValue(tds[j])) tds[j].appendTo(tr);
+        }
+        tr.appendTo(head);
+
+        // Create table data
+        if (mode === "checked") {
+            items = this.getSelectedItems();
+            start = 0; stop = items.length - 1;
+        } else if (mode === "view") {
+            items = this._filter();
+            start = parseInt(o.rows) === -1 ? 0 : o.rows * (this.currentPage - 1);
+            stop = parseInt(o.rows) === -1 ? items.length - 1 : start + o.rows - 1;
+        } else if (mode === "all") {
+            items = this.items;
+            start = 0; stop = items.length - 1;
+        } else {
+            items = this._filter();
+            start = 0; stop = items.length - 1;
+        }
+
+        for (i = start; i <= stop; i++) {
+            if (Utils.isValue(items[i])) {
+                tr = $("<tr>");
+
+                cells = items[i];
+
+                for (j = 0; j < cells.length; j++){
+                    tds[j] = null;
+                }
+
+                $.each(cells, function(cell_index){
+                    if (Utils.bool(that.view[cell_index].show) === false) {
+                        return ;
+                    }
+                    td = $("<td>").html(this);
+                    tds[that.view[cell_index]['index-view']] = td;
+                });
+
+                for (j = 0; j < cells.length; j++){
+                    if (Utils.isValue(tds[j])) tds[j].appendTo(tr);
+                }
+
+                tr.appendTo(body);
+            }
+        }
+
+        switch (to) {
+            default: Export.tableToCSV(table, filename, options);
+        }
+        table.remove();
+    },
+
+    changeAttribute: function(attributeName){
+
+    }
 };
 
 Metro.plugin('table', Table);
@@ -16783,6 +17774,13 @@ var Tabs = {
     },
 
     options: {
+        expand: null,
+        tabsPosition: "top",
+
+        clsTabs: "",
+        clsTabsList: "",
+        clsTabsListItem: "",
+
         onTab: Metro.noop,
         onBeforeTab: Metro.noop_true,
         onTabsCreate: Metro.noop
@@ -16815,18 +17813,24 @@ var Tabs = {
         var that = this, element = this.element, o = this.options;
         var prev = element.prev();
         var parent = element.parent();
-        var container = $("<div>").addClass("tabs tabs-wrapper " + element[0].className);
+        var right_parent = parent.hasClass("tabs");
+        var container = right_parent ? parent : $("<div>").addClass("tabs tabs-wrapper");
         var expandTitle, hamburger;
 
-        element[0].className = "";
-
-        if (prev.length === 0) {
-            parent.prepend(container);
-        } else {
-            container.insertAfter(prev);
+        if (Utils.isValue(o.expand)) {
+            container.addClass("tabs-expand-"+o.expand);
         }
 
-        element.appendTo(container);
+        container.addClass(o.tabsPosition.replace(["-", "_", "+"], " "));
+        if (o.tabsPosition.contains("vertical")) {
+            container.addClass("tabs-expand-fs"); // TODO need redesign this behavior
+        }
+
+        element.addClass("tabs-list");
+        if (!right_parent) {
+            container.insertBefore(element);
+            element.appendTo(container);
+        }
 
         element.data('expanded', false);
 
@@ -16843,6 +17847,9 @@ var Tabs = {
             }
         }
 
+        container.addClass(o.clsTabs);
+        element.addClass(o.clsTabsList);
+        element.children("li").addClass(o.clsTabsListItem);
     },
 
     _createEvents: function(){
@@ -17332,6 +18339,9 @@ var TimePicker = {
     },
 
     options: {
+        hoursStep: 1,
+        minutesStep: 1,
+        secondsStep: 1,
         value: null,
         locale: METRO_LOCALE,
         distance: 3,
@@ -17378,7 +18388,16 @@ var TimePicker = {
             o.distance = 1;
         }
 
-        if (element.val() === "" && (o.value === null || String(o.value).trim() === "")) {
+        if (o.hoursStep < 1) {o.hoursStep = 1;}
+        if (o.hoursStep > 23) {o.hoursStep = 23;}
+
+        if (o.minutesStep < 1) {o.minutesStep = 1;}
+        if (o.minutesStep > 59) {o.minutesStep = 59;}
+
+        if (o.secondsStep < 1) {o.secondsStep = 1;}
+        if (o.secondsStep > 59) {o.secondsStep = 59;}
+
+        if (element.val() === "" && (!Utils.isValue(o.value))) {
             o.value = (new Date()).format("%H:%M:%S");
         }
 
@@ -17392,6 +18411,8 @@ var TimePicker = {
             }
         }
 
+        this._normalizeValue();
+
         if (Metro.locales[o.locale] === undefined) {
             o.locale = METRO_LOCALE;
         }
@@ -17403,6 +18424,20 @@ var TimePicker = {
         this._set();
 
         Utils.exec(o.onTimePickerCreate, [element, picker]);
+    },
+
+    _normalizeValue: function(){
+        var o = this.options;
+
+        if (o.hoursStep > 1) {
+            this.value[0] = Utils.nearest(this.value[0], o.hoursStep, true);
+        }
+        if (o.minutesStep > 1) {
+            this.value[1] = Utils.nearest(this.value[1], o.minutesStep, true);
+        }
+        if (o.minutesStep > 1) {
+            this.value[2] = Utils.nearest(this.value[2], o.secondsStep, true);
+        }
     },
 
     _createStructure: function(){
@@ -17443,7 +18478,7 @@ var TimePicker = {
         if (o.hours === true) {
             hours = $("<ul>").addClass("sel-hours").appendTo(selectBlock);
             for (i = 0; i < o.distance; i++) $("<li>").html("&nbsp;").data("value", -1).appendTo(hours);
-            for (i = 0; i < 24; i++) {
+            for (i = 0; i < 24; i = i + o.hoursStep) {
                 $("<li>").addClass("js-hours-"+i).html(i < 10 ? "0"+i : i).data("value", i).appendTo(hours);
             }
             for (i = 0; i < o.distance; i++) $("<li>").html("&nbsp;").data("value", -1).appendTo(hours);
@@ -17451,7 +18486,7 @@ var TimePicker = {
         if (o.minutes === true) {
             minutes = $("<ul>").addClass("sel-minutes").appendTo(selectBlock);
             for (i = 0; i < o.distance; i++) $("<li>").html("&nbsp;").data("value", -1).appendTo(minutes);
-            for (i = 0; i < 60; i++) {
+            for (i = 0; i < 60; i = i + o.minutesStep) {
                 $("<li>").addClass("js-minutes-"+i).html(i < 10 ? "0"+i : i).data("value", i).appendTo(minutes);
             }
             for (i = 0; i < o.distance; i++) $("<li>").html("&nbsp;").data("value", -1).appendTo(minutes);
@@ -17459,7 +18494,7 @@ var TimePicker = {
         if (o.seconds === true) {
             seconds = $("<ul>").addClass("sel-seconds").appendTo(selectBlock);
             for (i = 0; i < o.distance; i++) $("<li>").html("&nbsp;").data("value", -1).appendTo(seconds);
-            for (i = 0; i < 60; i++) {
+            for (i = 0; i < 60; i = i + o.secondsStep) {
                 $("<li>").addClass("js-seconds-"+i).html(i < 10 ? "0"+i : i).data("value", i).appendTo(seconds);
             }
             for (i = 0; i < o.distance; i++) $("<li>").html("&nbsp;").data("value", -1).appendTo(seconds);
@@ -17528,6 +18563,7 @@ var TimePicker = {
             s = ss.length === 0 ? 0 : ss.data("value");
 
             that.value = [h, m, s];
+            that._normalizeValue();
             that._set();
 
             that.close();
@@ -17557,8 +18593,8 @@ var TimePicker = {
             });
 
             list.on(Metro.events.scrollStop, {latency: 50}, function(){
-                var target = Math.round((Math.ceil(list.scrollTop() + 40) / 40)) - 1;
-                var target_element = list.find(".js-"+list_name+"-"+target);
+                var target = Math.round((Math.ceil(list.scrollTop() + 40) / 40)) ;
+                var target_element = list.find("li").eq(target + o.distance - 1);
                 var scroll_to = target_element.position().top - (o.distance * 40) + list.scrollTop();
 
                 list.animate({
@@ -17616,32 +18652,49 @@ var TimePicker = {
         var picker = this.picker;
         var h, m, s;
         var h_list, m_list, s_list;
-        var select_wrapper = picker.find(".select-wrapper");
         var items = picker.find("li");
+        var select_wrapper = picker.find(".select-wrapper");
+        var select_wrapper_in_viewport, select_wrapper_rect;
+        var h_item, m_item, s_item;
 
+        select_wrapper.parent().removeClass("for-top for-bottom");
         select_wrapper.show();
         items.removeClass("active");
 
-        if (o.hours === true) {
-            h = this.value[0];
-            h_list = picker.find(".sel-hours");
-            h_list.scrollTop(0).animate({
-                scrollTop: h_list.find("li").eq(h).addClass("active").position().top
+        select_wrapper_in_viewport = Utils.inViewport(select_wrapper);
+        select_wrapper_rect = Utils.rect(select_wrapper);
+
+        if (!select_wrapper_in_viewport && select_wrapper_rect.top > 0) {
+            select_wrapper.parent().addClass("for-bottom");
+        }
+
+        if (!select_wrapper_in_viewport && select_wrapper_rect.top < 0) {
+            select_wrapper.parent().addClass("for-top");
+        }
+
+        var animateList = function(list, item){
+            list.scrollTop(0).animate({
+                scrollTop: item.position().top - (o.distance * 40) + list.scrollTop()
             }, 100);
+        };
+
+        if (o.hours === true) {
+            h = parseInt(this.value[0]);
+            h_list = picker.find(".sel-hours");
+            h_item = h_list.find("li.js-hours-" + h).addClass("active");
+            animateList(h_list, h_item);
         }
         if (o.minutes === true) {
-            m = this.value[1];
+            m = parseInt(this.value[1]);
             m_list = picker.find(".sel-minutes");
-            m_list.scrollTop(0).animate({
-                scrollTop: m_list.find("li").eq(m).addClass("active").position().top
-            }, 100);
+            m_item = m_list.find("li.js-minutes-" + m).addClass("active");
+            animateList(m_list, m_item);
         }
         if (o.seconds === true) {
-            s = this.value[2];
+            s = parseInt(this.value[2]);
             s_list = picker.find(".sel-seconds");
-            s_list.scrollTop(0).animate({
-                scrollTop: s_list.find("li").eq(s).addClass("active").position().top
-            }, 100);
+            s_item = s_list.find("li.js-seconds-" + s).addClass("active");
+            animateList(s_list, s_item);
         }
 
         this.isOpen = true;
@@ -17674,9 +18727,10 @@ var TimePicker = {
 
     val: function(t){
         if (t === undefined) {
-            return element.val();
+            return this.element.val();
         }
         this.value = this._convert(t);
+        this._normalizeValue();
         this._set();
     },
 
@@ -17690,6 +18744,7 @@ var TimePicker = {
         }
 
         this.value = this._convert(t);
+        this._normalizeValue();
         this._set();
     },
 
@@ -17704,16 +18759,19 @@ var TimePicker = {
         }
 
         this.value = this._convert(t);
+        this._normalizeValue();
         this._set();
     },
 
-    changeValueAttribute: function(){
-        this.val(this.element.attr("data-value"));
-    },
-
     changeAttribute: function(attributeName){
+        var that = this, element = this.element;
+
+        var changeValueAttribute = function(){
+            that.val(element.attr("data-value"));
+        };
+
         switch (attributeName) {
-            case "data-value": this.changeValueAttribute(); break;
+            case "data-value": changeValueAttribute(); break;
         }
     }
 };
@@ -17800,6 +18858,11 @@ var Treeview = {
         this._createTree();
         this._createEvents();
 
+        $.each(element.find("input"), function(){
+            if (!$(this).is(":checked")) return;
+            that._recheck(this);
+        });
+
         Utils.exec(o.onTreeviewCreate, [element]);
     },
 
@@ -17842,7 +18905,6 @@ var Treeview = {
 
         return node;
     },
-
 
     _createTree: function(){
         var that = this, element = this.element, o = this.options;
@@ -17924,46 +18986,57 @@ var Treeview = {
             var check = $(this);
             var checked = check.is(":checked");
             var node = check.closest("li");
-            var checks;
 
-            that.current(node);
-
-            // down
-            checks = check.closest("li").find("ul input[type=checkbox]");
-            checks.attr("data-indeterminate", false);
-            checks.prop("checked", checked);
-
-            checks = [];
-
-            $.each(element.find("input[type=checkbox]"), function(){
-                checks.push(this);
-            });
-
-            $.each(checks.reverse(), function(){
-                var ch = $(this);
-                var children = ch.closest("li").children("ul").find("input[type=checkbox]").length;
-                var children_checked = ch.closest("li").children("ul").find("input[type=checkbox]:checked").length;
-
-                if (children > 0 && children_checked === 0) {
-                    ch.attr("data-indeterminate", false);
-                    ch.prop("checked", false);
-                }
-
-                if (children_checked === 0) {
-                    ch.attr("data-indeterminate", false);
-                } else {
-                    if (children_checked > 0 && children > children_checked) {
-                        ch.attr("data-indeterminate", true);
-                    } else if (children === children_checked) {
-                        ch.attr("data-indeterminate", false);
-                        ch.prop("checked", true);
-                    }
-                }
-            });
-
+            that._recheck(check);
 
             Utils.exec(o.onCheckClick, [checked, check, node, element], this);
+        });
+    },
 
+    _recheck: function(check){
+        var element = this.element;
+        var checked, node, checks;
+
+        if (!Utils.isJQueryObject(check)) {
+            check = $(check);
+        }
+
+        checked = check.is(":checked");
+        node = check.closest("li");
+
+        this.current(node);
+
+        // down
+        checks = check.closest("li").find("ul input[type=checkbox]");
+        checks.attr("data-indeterminate", false);
+        checks.prop("checked", checked);
+
+        checks = [];
+
+        $.each(element.find(":checkbox"), function(){
+            checks.push(this);
+        });
+
+        $.each(checks.reverse(), function(){
+            var ch = $(this);
+            var children = ch.closest("li").children("ul").find(":checkbox").length;
+            var children_checked = ch.closest("li").children("ul").find(":checkbox:checked").length;
+
+            if (children > 0 && children_checked === 0) {
+                ch.attr("data-indeterminate", false);
+                ch.prop("checked", false);
+            }
+
+            if (children_checked === 0) {
+                ch.attr("data-indeterminate", false);
+            } else {
+                if (children_checked > 0 && children > children_checked) {
+                    ch.attr("data-indeterminate", true);
+                } else if (children === children_checked) {
+                    ch.attr("data-indeterminate", false);
+                    ch.prop("checked", true);
+                }
+            }
         });
     },
 
@@ -18069,28 +19142,28 @@ Metro.plugin('treeview', Treeview);
 // Source: js/plugins/validator.js
 var ValidatorFuncs = {
     required: function(val){
-        return val.trim() !== "";
+        return Utils.isValue(val.trim());
     },
     length: function(val, len){
-        if (len === undefined || isNaN(len) || len <= 0) {
+        if (!Utils.isValue(len) || isNaN(len) || len <= 0) {
             return false;
         }
         return val.trim().length === parseInt(len);
     },
     minlength: function(val, len){
-        if (len === undefined || isNaN(len) || len <= 0) {
+        if (!Utils.isValue(len) || isNaN(len) || len <= 0) {
             return false;
         }
         return val.trim().length >= parseInt(len);
     },
     maxlength: function(val, len){
-        if (len === undefined || isNaN(len) || len <= 0) {
+        if (!Utils.isValue(len) || isNaN(len) || len <= 0) {
             return false;
         }
         return val.trim().length <= parseInt(len);
     },
     min: function(val, min_value){
-        if (min_value === undefined || isNaN(min_value)) {
+        if (!Utils.isValue(min_value) || isNaN(min_value)) {
             return false;
         }
         if (!this.number(val)) {
@@ -18102,7 +19175,7 @@ var ValidatorFuncs = {
         return Number(val) >= Number(min_value);
     },
     max: function(val, max_value){
-        if (max_value === undefined || isNaN(max_value)) {
+        if (!Utils.isValue(max_value) || isNaN(max_value)) {
             return false;
         }
         if (!this.number(val)) {
@@ -18144,7 +19217,7 @@ var ValidatorFuncs = {
         return Colors.color(val, Colors.PALETTES.STANDARD) !== false;
     },
     pattern: function(val, pat){
-        if (pat === undefined) {
+        if (!Utils.isValue(pat)) {
             return false;
         }
         var reg = new RegExp(pat);
